@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}{{ project.name }} — claude-manager{% endblock %}
+{% block content %}
+<header class="page-head project-head">
+  <div class="head-main">
+    <h1>{{ project.name }}</h1>
+    {% if project.slug != project.name %}<span class="slug">{{ project.slug }}</span>{% endif %}
+    {% if project.description %}<p class="muted">{{ project.description }}</p>{% endif %}
+  </div>
+  <div class="head-stats">
+    <div class="big">{{ project.progress }}%</div>
+    <div class="muted small">{{ project.tasks_done }}/{{ project.tasks_total }} tâches</div>
+  </div>
+</header>
+<div class="progress"><div class="bar" style="width: {{ project.progress }}%"></div></div>
+
+<div class="head-meta muted small">
+  {% if project.path %}<code>{{ project.path }}</code>{% endif %}
+  {% if project.repo_url %}<a href="{{ project.repo_url }}">dépôt</a>{% endif %}
+  <a href="/p/{{ project.slug }}/briefing.md">briefing de Claude</a>
+  <span class="tag status-{{ project.status }}">{{ project.status }}</span>
+  {% for tag in project.tags %}<span class="tag">#{{ tag }}</span>{% endfor %}
+</div>
+
+<details class="inline-form">
+  <summary class="btn ghost">⚙ Réglages du projet</summary>
+  <form method="post" action="/p/{{ project.slug }}/settings" class="grid-form">
+    <label>Nom <input name="name" value="{{ project.name }}"></label>
+    <label>Chemin <input name="path" value="{{ project.path or '' }}"></label>
+    <label>Dépôt <input name="repo_url" value="{{ project.repo_url or '' }}"></label>
+    <label class="wide">Description <input name="description" value="{{ project.description or '' }}"></label>
+    <label class="wide">Tags <input name="tags" value="{{ project.tags|join(', ') }}" placeholder="pro, client-x"></label>
+    <label>Statut
+      <select name="status">
+        {% for s in ['active', 'paused', 'archived'] %}
+          <option value="{{ s }}" {% if project.status == s %}selected{% endif %}>{{ s }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <button type="submit">Enregistrer</button>
+  </form>
+</details>
+
+<div class="tabs-wrap">
+<nav class="tabs" aria-label="Sections du projet">
+  {% for key, label in tabs %}
+    <a class="{% if key == tab %}active{% endif %}" href="/p/{{ project.slug }}/{{ key }}">{{ label }}</a>
+  {% endfor %}
+</nav>
+</div>
+
+<div id="live-activity" data-live-slug="{{ project.slug }}" data-live-version="{{ live_version }}">
+  {% include "partials/activity.html" %}
+</div>
+
+<div id="panel" data-slug="{{ project.slug }}" data-tab="{{ tab }}">
+  {% include "partials/" + tab + ".html" %}
+</div>
+{% endblock %}

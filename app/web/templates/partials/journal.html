@@ -1,0 +1,31 @@
+<details class="inline-form">
+  <summary class="btn">+ Ajouter une entrée</summary>
+  <form class="panel-form grid-form" method="post" action="/p/{{ project.slug }}/journal/new">
+    <input name="summary" placeholder="Ce qui vient d'être fait ou décidé" required>
+    <textarea name="detail" rows="2" placeholder="Détail (optionnel)"></textarea>
+    <select name="kind">
+      {% for k in ['work', 'decision', 'note', 'blocker', 'milestone'] %}
+        <option value="{{ k }}">{{ k }}</option>
+      {% endfor %}
+    </select>
+    <button type="submit">Enregistrer</button>
+  </form>
+</details>
+
+<ul class="timeline full">
+  {% for j in journal %}
+  <li class="k-{{ j.kind }}">
+    <span class="when">{{ j.created_at[:16]|replace('T', ' ') }}</span>
+    <span class="kind k-{{ j.kind }}">{{ j.kind }}</span>
+    <span class="actor">{{ j.actor }}</span>
+    <div class="entry">
+      <div class="md-ligne">{{ j.summary | markdown_ligne }}{% if j.task_title %} <span class="muted small">— tâche #{{ j.task_id }} {{ j.task_title }}</span>{% endif %}</div>
+      {# Le détail d'une entrée est souvent écrit en markdown, par moi comme par
+         un agent. `markdown` échappe avant de mettre en forme — voir markup.py. #}
+      {% if j.detail %}<div class="muted small detail md">{{ j.detail | markdown }}</div>{% endif %}
+    </div>
+  </li>
+  {% else %}
+  <li class="muted">Journal vide. Il se remplit à chaque appel de <code>log_work</code>.</li>
+  {% endfor %}
+</ul>

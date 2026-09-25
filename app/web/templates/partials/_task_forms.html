@@ -1,0 +1,41 @@
+{# Sélecteurs statut et priorité, partagés par la liste, le kanban et les jalons.
+   `view` est transmis pour que le serveur réaffiche la vue d'où vient le clic. #}
+{% macro selects(project, t, statuses, priorities, tab='tasks', view='liste', compact=false) %}
+<form class="panel-form {{ 'kcard-select' if compact else 'task-selects' }}" method="post"
+      action="/p/{{ project.slug }}/tasks/{{ t.id }}/update">
+  <input type="hidden" name="tab" value="{{ tab }}">
+  <input type="hidden" name="view" value="{{ view }}">
+  <select name="status" class="auto status-select" aria-label="Statut">
+    {% for s in statuses %}
+      <option value="{{ s }}" {% if t.status == s %}selected{% endif %}>{{ s }}</option>
+    {% endfor %}
+  </select>
+  {% if not compact %}
+  <select name="priority" class="auto prio-select p{{ t.priority }}" aria-label="Priorité">
+    {% for value, label in priorities.items()|sort(reverse=true) %}
+      <option value="{{ value }}" {% if t.priority == value %}selected{% endif %}>{{ label }}</option>
+    {% endfor %}
+  </select>
+  {% endif %}
+</form>
+{% endmacro %}
+
+{% macro badges(t, subs=none) %}
+<span class="meta">
+  {% if subs %}
+    {% set closed = subs|selectattr('status', 'in', ['done', 'cancelled'])|list|length %}
+    <span class="tag checklist-count {{ 'complete' if closed == subs|length }}"
+          title="Sous-tâches terminées">☑ {{ closed }}/{{ subs|length }}</span>
+  {% elif t.checks and t.checks[1] %}
+    <span class="tag checklist-count {{ 'complete' if t.checks[0] == t.checks[1] }}"
+          title="Cases cochées dans la description">☑ {{ t.checks[0] }}/{{ t.checks[1] }}</span>
+  {% endif %}
+  {% if t.parent_id and not t.nested %}<span class="tag" title="Sous-tâche">↳ #{{ t.parent_id }}</span>{% endif %}
+  {% if t.priority >= 3 %}<span class="prio p{{ t.priority }}">{{ t.priority_label }}</span>{% endif %}
+  {% if t.owner != 'claude' %}<span class="tag owner">{{ t.owner }}</span>{% endif %}
+  {% for tag in t.tags %}<span class="tag">#{{ tag }}</span>{% endfor %}
+  {% if t.status == 'cancelled' and t.cancel_reason %}<span class="tag cancel-reason" title="Raison de l'abandon">✗ {{ t.cancel_reason }}</span>{% endif %}
+  {% if t.blocked_reason %}<span class="tag blocked">{{ t.blocked_reason }}</span>{% endif %}
+  <span class="muted small">#{{ t.id }}</span>
+</span>
+{% endmacro %}

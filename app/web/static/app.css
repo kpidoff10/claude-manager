@@ -1,0 +1,965 @@
+:root {
+  --bg: #0f1115;
+  --panel: #161a21;
+  --panel-2: #1c212a;
+  --border: #262d39;
+  --text: #d9dee8;
+  --muted: #8b93a3;
+  --accent: #7aa2f7;
+  --urgent: #f7768e;
+  --high: #ff9e64;
+  --ok: #9ece6a;
+  --warn: #e0af68;
+  --radius: 10px;
+  --sidebar-w: 252px;
+  --topbar-h: 52px;
+}
+
+* { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Ubuntu, sans-serif;
+  min-height: 100vh;
+}
+
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+h1 { font-size: 21px; margin: 0; }
+h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .07em;
+     color: var(--muted); margin: 26px 0 10px; }
+h3 { font-size: 15px; margin: 0; }
+p { margin: 6px 0; }
+code, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px;
+              overflow-wrap: anywhere; }
+.muted { color: var(--muted); }
+.small { font-size: 12.5px; }
+.error { color: var(--urgent); }
+
+/* ==================================================================
+   Ossature : barre latérale (tiroir sur mobile) + colonne principale
+   ================================================================== */
+
+.overlay { display: none; }
+
+.sidebar {
+  background: var(--panel);
+  border-right: 1px solid var(--border);
+  padding: 12px 10px calc(12px + env(safe-area-inset-bottom));
+  display: flex; flex-direction: column; gap: 16px;
+  /* Mobile d'abord : tiroir hors écran, révélé par le bouton ☰. */
+  position: fixed; inset: 0 auto 0 0; width: min(84vw, var(--sidebar-w));
+  z-index: 60; transform: translateX(-100%);
+  transition: transform .22s ease; overflow-y: auto;
+}
+body.drawer-open .sidebar { transform: none; box-shadow: 0 0 40px rgba(0, 0, 0, .55); }
+body.drawer-open .overlay {
+  display: block; position: fixed; inset: 0; z-index: 50;
+  background: rgba(0, 0, 0, .55);
+}
+body.drawer-open { overflow: hidden; }
+
+.sidebar-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.brand { font-weight: 600; font-size: 15px; color: var(--text); }
+.brand:hover { text-decoration: none; }
+
+.nav-group { display: flex; flex-direction: column; gap: 2px; }
+.nav-group.projects { flex: 1; min-height: 0; }
+.nav-group.bottom { border-top: 1px solid var(--border); padding-top: 10px; margin-top: auto; }
+.nav-title { font-size: 10.5px; text-transform: uppercase; letter-spacing: .09em;
+             color: var(--muted); padding: 4px 8px; }
+.nav-empty { padding: 4px 8px; font-size: 13px; }
+
+.nav-item {
+  display: flex; align-items: center; gap: 9px; padding: 9px 9px;
+  border-radius: 7px; color: var(--text); font-size: 14px; min-height: 38px;
+}
+.nav-item:hover { background: var(--panel-2); text-decoration: none; }
+.nav-item.active { background: var(--panel-2); box-shadow: inset 2px 0 0 var(--accent); }
+.nav-item .ico { width: 16px; text-align: center; color: var(--muted); flex: none; }
+.project-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.main { display: flex; flex-direction: column; min-width: 0; min-height: 100vh; }
+
+.topbar {
+  position: sticky; top: 0; z-index: 40;
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 12px; min-height: var(--topbar-h);
+  background: rgba(22, 26, 33, .92); backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--border);
+}
+.crumbs { display: flex; align-items: center; gap: 6px; font-size: 13.5px;
+          min-width: 0; overflow: hidden; white-space: nowrap; }
+.crumbs a { color: var(--muted); }
+.crumbs a:last-of-type { color: var(--text); }
+.crumbs .sep { color: var(--border); }
+.crumbs .current { color: var(--text); overflow: hidden; text-overflow: ellipsis; }
+.topbar-search { display: none; margin-left: auto; }
+.topbar-search input { width: 210px; }
+
+.icon-btn {
+  background: transparent; border: 1px solid var(--border); color: var(--text);
+  border-radius: 7px; width: 36px; height: 36px; flex: none;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 16px; cursor: pointer; padding: 0;
+}
+.icon-btn:hover { border-color: var(--accent); }
+.search-link { margin-left: auto; text-decoration: none; }
+
+.content { flex: 1; padding: 18px 14px calc(56px + env(safe-area-inset-bottom)); width: 100%; }
+
+.centered { display: grid; place-items: center; min-height: 100vh; padding: 20px; }
+.login { width: min(340px, 100%); display: flex; flex-direction: column; gap: 10px; }
+
+/* ==================================================================
+   Éléments de base
+   ================================================================== */
+
+.dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); flex: none; }
+.dot.status-paused { background: var(--warn); }
+.dot.status-archived { background: var(--muted); }
+
+.badge { font-size: 11px; background: var(--panel-2); color: var(--muted);
+         border-radius: 10px; padding: 1px 6px; flex: none; }
+.badge.hot { background: rgba(247, 118, 142, .18); color: var(--urgent); }
+
+/* Signaux de la barre latérale : qui travaille, et ce qui attend une décision.
+   Hauteur et interligne fixes : sans cela, la pastille qui contient un point
+   animé et celle qui ne contient que du texte ne font pas la même hauteur, et
+   l'œil voit le décalage. */
+.sig { font-size: 10.5px; line-height: 1; height: 19px; padding: 0 7px;
+       border-radius: 10px; flex: none; box-sizing: border-box;
+       display: inline-flex; align-items: center; gap: 5px; letter-spacing: .02em; }
+.sig.working { background: rgba(122, 162, 247, .18); color: var(--accent); }
+.sig.working .pulse { width: 6px; height: 6px; align-self: center; }
+.sig.recent { color: var(--muted); background: var(--panel-2); }
+.sig.awaiting { background: rgba(255, 158, 100, .2); color: var(--high); font-weight: 600; }
+
+.tag { display: inline-block; font-size: 11px; padding: 1px 6px; border-radius: 4px;
+       background: var(--panel-2); color: var(--muted); border: 1px solid var(--border);
+       max-width: 100%; overflow-wrap: anywhere; }
+.tag.hot, .tag.blocked, .tag.secret { background: rgba(247, 118, 142, .15); color: var(--urgent); }
+.tag.req { background: rgba(224, 175, 104, .15); color: var(--warn); }
+.tag.owner { background: rgba(122, 162, 247, .15); color: var(--accent); }
+.tag.scan { background: transparent; }
+.tag.status-active, .tag.level-preferred { background: rgba(158, 206, 106, .15); color: var(--ok); }
+.tag.status-archived, .tag.level-avoid { background: rgba(247, 118, 142, .12); color: var(--urgent); }
+.tag.status-paused { background: rgba(224, 175, 104, .15); color: var(--warn); }
+.count { font-size: 12px; color: var(--muted); font-weight: 400; }
+
+.progress { height: 5px; background: var(--panel-2); border-radius: 3px;
+            overflow: hidden; margin: 8px 0; }
+.progress .bar { height: 100%; background: var(--accent); }
+
+button, .btn {
+  background: var(--panel-2); color: var(--text); border: 1px solid var(--border);
+  border-radius: 7px; padding: 8px 13px; font-size: 13.5px; cursor: pointer;
+  font-family: inherit; display: inline-block; min-height: 36px;
+}
+button:hover, .btn:hover { border-color: var(--accent); text-decoration: none; }
+button.danger { color: var(--urgent); }
+button.small, .btn.small { padding: 3px 9px; font-size: 12px; min-height: 30px; }
+.btn.ghost { background: transparent; }
+summary { cursor: pointer; list-style: none; }
+summary::-webkit-details-marker { display: none; }
+
+input, select, textarea {
+  background: var(--bg); color: var(--text); border: 1px solid var(--border);
+  border-radius: 7px; padding: 9px 10px; font: inherit; font-size: 16px;
+  max-width: 100%; min-width: 0;
+}
+input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent); }
+textarea { resize: vertical; width: 100%; }
+.check { display: flex; align-items: center; gap: 7px; font-size: 13px; color: var(--muted); }
+.check input { width: auto; min-height: 0; }
+
+label { display: flex; flex-direction: column; gap: 3px;
+        font-size: 11.5px; color: var(--muted); flex: 1 1 190px; min-width: 0; }
+label.wide { flex-basis: 100%; }
+label.check { flex-direction: row; align-items: center; flex-basis: auto; }
+
+/* ==================================================================
+   Formulaires
+   ================================================================== */
+
+.inline-form { margin: 10px 0; }
+.inline-form[open] > summary { margin-bottom: 8px; }
+.grid-form {
+  display: flex; flex-wrap: wrap; gap: 9px; align-items: flex-end;
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 12px;
+}
+.grid-form > input, .grid-form > select { flex: 1 1 190px; }
+.grid-form > textarea { flex: 1 1 100%; }
+.grid-form > button { flex: 0 0 auto; }
+.grid-form.wide { max-width: 720px; }
+form.inline { display: inline-flex; gap: 6px; margin: 0; }
+
+/* ==================================================================
+   En-têtes de page et onglets
+   ================================================================== */
+
+.page-head { display: flex; justify-content: space-between; align-items: flex-start;
+             gap: 14px; flex-wrap: wrap; margin-bottom: 6px; }
+.head-main { min-width: 0; flex: 1 1 260px; }
+.head-stats { text-align: right; flex: none; }
+.head-stats .big { font-size: 26px; font-weight: 600; line-height: 1.1; }
+.slug { font-size: 12.5px; color: var(--muted); font-family: ui-monospace, monospace; }
+.head-meta { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 6px; }
+
+.tabs {
+  display: flex; gap: 2px; border-bottom: 1px solid var(--border);
+  margin: 14px 0 6px; overflow-x: auto; scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.tabs::-webkit-scrollbar { display: none; }
+.tabs a { padding: 10px 10px; color: var(--muted); font-size: 14px; white-space: nowrap;
+          border-bottom: 2px solid transparent; }
+.tabs a:hover { color: var(--text); text-decoration: none; }
+.tabs a.active { color: var(--text); border-bottom-color: var(--accent); }
+
+/* ==================================================================
+   Cartes
+   ================================================================== */
+
+.card { background: var(--panel); border: 1px solid var(--border);
+        border-radius: var(--radius); padding: 14px; }
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
+.project-card { color: var(--text); display: block; }
+.project-card:hover { border-color: var(--accent); text-decoration: none; }
+.card-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.card-head h2 { margin: 0; font-size: 16px; text-transform: none; letter-spacing: 0; color: var(--text); }
+.card-stats { display: flex; gap: 12px; flex-wrap: wrap; font-size: 12.5px; color: var(--muted); }
+.card-stats .hot, .card-stats .blocked { color: var(--urgent); }
+.card-stats .in-progress { color: var(--accent); }
+
+.two-cols { display: grid; grid-template-columns: 1fr; gap: 22px; }
+
+/* ==================================================================
+   Listes en cartes — remplacent les tableaux, empilables sans débordement
+   ================================================================== */
+
+.rows { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 6px; }
+.row-card { background: var(--panel); border: 1px solid var(--border);
+            border-radius: var(--radius); padding: 10px 12px; }
+.row-top { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.row-name { font-weight: 600; overflow-wrap: anywhere; }
+.row-facts { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 5px;
+             font-size: 12.5px; color: var(--muted); }
+.row-facts b { color: var(--text); font-weight: 500; overflow-wrap: anywhere; }
+.row-note { margin-top: 5px; font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
+.row-actions-inline { display: flex; gap: 6px; margin-left: auto; flex: none; }
+.row-edit { margin-top: 8px; }
+.row-edit > summary { font-size: 12px; color: var(--muted); }
+.row-card.is-deprecated .row-name { text-decoration: line-through; color: var(--muted); }
+.row-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin: 8px 0; }
+
+/* ==================================================================
+   Tâches
+   ================================================================== */
+
+.task-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 5px; }
+.task {
+  display: flex; align-items: flex-start; gap: 8px; background: var(--panel);
+  border: 1px solid var(--border); border-left: 3px solid var(--border);
+  border-radius: 8px; padding: 9px 10px; flex-wrap: wrap;
+}
+.task.p4 { border-left-color: var(--urgent); }
+.task.p3 { border-left-color: var(--high); }
+.task.status-in_progress { background: rgba(122, 162, 247, .07); }
+.task.status-blocked { background: rgba(247, 118, 142, .07); }
+.task.status-done .task-title, .task.status-cancelled .task-title {
+  text-decoration: line-through; color: var(--muted); }
+.task.drag-over { border-top: 2px solid var(--accent); }
+.task.dragging { opacity: .4; }
+/* Masquée sur mobile : le glisser-déposer HTML5 ne se déclenche pas au tactile,
+   une poignée inerte ne ferait qu'induire en erreur. La priorité reste
+   modifiable par la liste déroulante. */
+.handle { display: none; cursor: grab; color: var(--muted); user-select: none;
+          padding-top: 6px; }
+.task-selects { display: flex; gap: 6px; flex: none; order: 2; }
+.task-selects select { font-size: 12.5px; padding: 4px 6px; min-height: 30px; }
+.prio-select.p4 { color: var(--urgent); }
+.prio-select.p3 { color: var(--high); }
+.task-body { flex: 1 1 100%; order: 3; min-width: 0; }
+.task-body > summary { display: flex; flex-direction: column; gap: 4px; }
+.task-title { font-size: 14.5px; overflow-wrap: anywhere; }
+.meta { display: flex; gap: 5px; align-items: center; flex-wrap: wrap; }
+.body-text { white-space: pre-wrap; font-size: 13.5px; color: var(--muted);
+             margin: 7px 0; overflow-wrap: anywhere; }
+.done-block > summary h2 { display: inline-block; }
+
+/* ==================================================================
+   Kanban
+   ================================================================== */
+
+.tag-filter { display: flex; gap: 6px; flex-wrap: wrap; align-items: center;
+              margin: 0 0 10px; }
+.tag-chip { background: transparent; border: 1px solid var(--border); color: var(--muted);
+            border-radius: 20px; padding: 0 10px; height: 26px; min-height: 0;
+            font-size: 12px; display: inline-flex; align-items: center; gap: 6px; }
+.tag-chip:hover { border-color: var(--accent); color: var(--text); }
+.tag-chip.active { background: rgba(122, 162, 247, .16); border-color: var(--accent);
+                   color: var(--accent); }
+.tag-count { font-size: 10.5px; opacity: .7; }
+
+/* Repli de la barre de tags. La case à cocher ne sert qu'à porter l'état : elle
+   reste dans le flux mais invisible, et ce sont ses frères suivants qui
+   apparaissent. Tout en CSS, donc le dépliage fonctionne sans JavaScript. */
+.tag-plus-toggle { position: absolute; opacity: 0; pointer-events: none; }
+.tag-extra { display: none; }
+.tag-plus-toggle:checked ~ .tag-extra { display: inline-flex; }
+.tag-plus { cursor: pointer; border-style: dashed; }
+.tag-plus::before { content: attr(data-plus); }
+.tag-plus-toggle:checked ~ .tag-plus::before { content: attr(data-moins); }
+
+.view-switch { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin: 4px 0 10px; }
+.view-switch .btn.active { border-color: var(--accent); color: var(--text); }
+
+.kanban {
+  display: flex; gap: 10px; align-items: flex-start;
+  /* Sur téléphone les colonnes défilent horizontalement, avec accrochage :
+     empiler quatre colonnes verticalement ferait perdre la lecture du flux. */
+  overflow-x: auto; scroll-snap-type: x proximity;
+  padding-bottom: 10px; scrollbar-width: thin;
+}
+.kcol {
+  flex: 0 0 min(272px, 80vw); scroll-snap-align: start;
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 8px; min-height: 90px;
+}
+.kcol-head { font-size: 12px; text-transform: uppercase; letter-spacing: .06em;
+             color: var(--muted); padding: 2px 4px 8px; display: flex; gap: 6px; }
+.kcol.status-in_progress .kcol-head { color: var(--accent); }
+.kcol.status-blocked .kcol-head { color: var(--urgent); }
+.kcol.status-done .kcol-head { color: var(--ok); }
+
+.kcol-head { position: sticky; top: 0; z-index: 2;
+             background: var(--panel); margin: -8px -8px 0; padding: 10px 12px 8px; }
+.kcards { list-style: none; margin: 0; padding: 8px 0 0; display: flex;
+          flex-direction: column; gap: 7px; min-height: 46px; }
+.kcards.drop-target { outline: 2px dashed var(--accent); outline-offset: 3px; border-radius: 8px; }
+.kempty { padding: 8px 4px; }
+
+.kcard {
+  background: var(--panel-2); border: 1px solid var(--border);
+  border-left: 3px solid var(--border); border-radius: 8px; padding: 8px 9px;
+  cursor: grab; display: flex; flex-direction: column; gap: 6px;
+}
+.kcard.p4 { border-left-color: var(--urgent); }
+.kcard.p3 { border-left-color: var(--high); }
+.kcard.dragging { opacity: .4; }
+.kcard-title { font-size: 13.5px; line-height: 1.4; overflow-wrap: anywhere; }
+.kcard .meta { gap: 4px; }
+.kcard-select select { font-size: 12px; padding: 3px 5px; min-height: 28px; width: 100%; }
+.kcard-log { align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; }
+.kcard-log.live { color: var(--accent); border-color: rgba(122, 162, 247, .45); }
+.kcard-log.live .pulse { width: 7px; height: 7px; }
+.kcard-collision { color: var(--urgent); font-weight: 600; }
+.kcol.status-done .kcard-title { color: var(--muted); }
+.kcol.status-queued .kcol-head { color: var(--warn); }
+.kcol.status-needs_input .kcol-head, .kcol.status-review .kcol-head { color: var(--high); }
+
+.queue-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+             background: var(--panel); border: 1px solid var(--border);
+             border-radius: var(--radius); padding: 8px 12px; margin-bottom: 8px;
+             font-size: 13.5px; }
+.qdot { width: 9px; height: 9px; border-radius: 50%; flex: none; background: var(--muted); }
+.qdot.running { background: var(--accent); box-shadow: 0 0 0 3px rgba(122, 162, 247, .22); }
+.qdot.paused { background: var(--warn); }
+.qdot.idle { background: var(--ok); }
+.qdot.blocked-q { background: var(--urgent); box-shadow: 0 0 0 3px rgba(247, 118, 142, .2); }
+.kcol-warning { font-size: 12px; color: var(--warn); background: rgba(224, 175, 104, .12);
+                border-radius: 6px; padding: 6px 8px; margin-bottom: 6px; }
+
+/* Nommé `-strip` et non `.awaiting` : ce dernier entrait en collision avec la
+   pastille `.sig.awaiting` de la barre latérale, à qui il imposait sa taille de
+   police et sa marge — deux pastilles voisines cessaient d'être alignées. */
+.awaiting-strip { display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+                  margin-bottom: 8px; font-size: 13px; }
+.awaiting-strip strong { color: var(--high); }
+
+.kcard.is-review { border-left-color: var(--high); }
+.kcard.is-needs_input, .kcard.is-blocked { border-left-color: var(--warn); }
+.kcard-note { font-size: 12.5px; color: var(--warn); background: rgba(224, 175, 104, .1);
+              border-radius: 5px; padding: 5px 7px; overflow-wrap: anywhere; }
+.kcard-run { font-size: 12.5px; border-radius: 6px; padding: 6px 8px;
+             background: rgba(255, 255, 255, .03); display: flex;
+             flex-direction: column; gap: 4px; }
+.kcard-run.ok { background: rgba(158, 206, 106, .1); }
+.kcard-run.ko { background: rgba(247, 118, 142, .12); }
+.kcard-run .diff { margin: 0; font-size: 11px; white-space: pre-wrap;
+                   max-height: 100px; overflow: auto; color: var(--muted); }
+.kcard-actions { display: flex; gap: 6px; flex-wrap: wrap; align-items: flex-start; }
+.kcard-actions .ok-btn { color: var(--ok); }
+.kcard-actions .reject .grid-form { margin-top: 6px; }
+
+/* ==================================================================
+   Journal d'un agent
+   ================================================================== */
+
+.run-head .head-stats { text-align: right; }
+.run-state { font-size: 13px; padding: 4px 10px; border-radius: 20px;
+             border: 1px solid var(--border); display: inline-flex;
+             align-items: center; gap: 7px; }
+.run-state.s-passed { color: var(--ok); border-color: rgba(158, 206, 106, .4); }
+.run-state.s-failed, .run-state.s-error { color: var(--urgent);
+                                          border-color: rgba(247, 118, 142, .4); }
+.run-state.s-running { color: var(--accent); border-color: rgba(122, 162, 247, .4); }
+.run-state.s-stopped { color: var(--warn); }
+
+.pulse { width: 8px; height: 8px; border-radius: 50%; background: currentColor;
+         animation: pulse 1.4s ease-in-out infinite; flex: none; }
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .25; } }
+@media (prefers-reduced-motion: reduce) { .pulse { animation: none; } }
+
+.run-facts { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center;
+             font-size: 12.5px; color: var(--muted); margin: 10px 0 14px;
+             padding-bottom: 12px; border-bottom: 1px solid var(--border); }
+.run-facts .c-read { color: var(--accent); }
+.run-facts .c-write { color: var(--high); }
+.run-facts .c-shell { color: var(--ok); }
+.run-facts .c-mcp { color: var(--warn); }
+
+.run-tests { border-radius: var(--radius); padding: 10px 12px; margin-bottom: 12px;
+             display: flex; flex-direction: column; gap: 6px; font-size: 13px;
+             border: 1px solid var(--border); }
+.run-tests.ok { background: rgba(158, 206, 106, .09); border-color: rgba(158, 206, 106, .3); }
+.run-tests.ko { background: rgba(247, 118, 142, .1); border-color: rgba(247, 118, 142, .35); }
+.run-diff { margin-bottom: 12px; }
+pre.output { margin: 8px 0 0; background: var(--bg); border: 1px solid var(--border);
+             border-radius: 7px; padding: 9px 11px; font-size: 11.5px; line-height: 1.5;
+             max-height: 340px; overflow: auto; white-space: pre-wrap;
+             overflow-wrap: anywhere; color: var(--muted); }
+
+.steps { list-style: none; margin: 0; padding: 0 0 0 4px; }
+.step { position: relative; padding: 0 0 14px 26px; border-left: 1px solid var(--border); }
+.step:last-child { border-left-color: transparent; }
+.step-dot { position: absolute; left: -9px; top: 0; width: 18px; height: 18px;
+            border-radius: 50%; background: var(--panel-2); border: 1px solid var(--border);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 9.5px; color: var(--muted); }
+.step-body { font-size: 13.5px; line-height: 1.55; overflow-wrap: anywhere;
+             white-space: pre-wrap; }
+.step.say .step-dot { background: var(--accent); border-color: var(--accent); }
+.step.say .step-body { background: var(--panel); border: 1px solid var(--border);
+                       border-radius: 8px; padding: 9px 12px; }
+.step.note { border-left-color: transparent; }
+
+.step.tool .step-body { display: flex; flex-direction: column; gap: 4px; }
+.tool-name { font-weight: 600; font-size: 12.5px; letter-spacing: .01em; }
+.tool-label { font-size: 12px; color: var(--muted); }
+.step.tool.cat-read .step-dot { color: var(--accent); border-color: rgba(122,162,247,.45); }
+.step.tool.cat-read .tool-name { color: var(--accent); }
+.step.tool.cat-write .step-dot { color: var(--high); border-color: rgba(255,158,100,.45); }
+.step.tool.cat-write .tool-name { color: var(--high); }
+.step.tool.cat-shell .step-dot { color: var(--ok); border-color: rgba(158,206,106,.45); }
+.step.tool.cat-shell .tool-name { color: var(--ok); }
+.step.tool.cat-mcp .step-dot { color: var(--warn); border-color: rgba(224,175,104,.45); }
+.step.tool.cat-mcp .tool-name { color: var(--warn); }
+.step.tool.has-error .step-dot { color: var(--urgent); border-color: var(--urgent); }
+.tool-result > summary { font-size: 11.5px; color: var(--muted); }
+
+.run-final { margin-top: 16px; background: var(--panel); border: 1px solid var(--border);
+             border-left: 3px solid var(--accent); border-radius: var(--radius);
+             padding: 12px 14px; font-size: 13.5px; white-space: pre-wrap;
+             overflow-wrap: anywhere; }
+.live-hint { display: flex; align-items: center; gap: 8px; margin-top: 14px;
+             color: var(--accent); }
+
+/* ==================================================================
+   Listes diverses
+   ================================================================== */
+
+.flat-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 4px; }
+.flat-list li { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap;
+                padding: 8px 0; border-bottom: 1px solid var(--border); }
+.results li { flex-direction: column; gap: 3px; }
+.prio { font-size: 11px; padding: 1px 6px; border-radius: 4px; background: var(--panel-2); flex: none; }
+.prio.p4 { color: var(--urgent); }
+.prio.p3 { color: var(--high); }
+
+.profile-block { margin-bottom: 26px; }
+
+.milestone-list { list-style: none; padding: 0; margin: 0;
+                  display: flex; flex-direction: column; gap: 10px; }
+.milestone { background: var(--panel); border: 1px solid var(--border);
+             border-radius: var(--radius); padding: 12px; }
+.milestone-head { display: flex; gap: 9px; align-items: baseline; flex-wrap: wrap; }
+.milestone.status-done { opacity: .68; }
+.milestone-tasks { margin-top: 10px; }
+.milestone-tasks .task { background: var(--panel-2); }
+.milestone-tasks .task.status-in_progress { background: rgba(122, 162, 247, .12); }
+.milestone-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+.milestone-actions > details { flex: 1 1 auto; }
+
+.memory-list { list-style: none; padding: 0; margin: 0;
+               display: flex; flex-direction: column; gap: 8px; }
+.memory { background: var(--panel); border: 1px solid var(--border);
+          border-radius: var(--radius); padding: 12px; }
+.memory.pinned { border-color: var(--accent); }
+.memory-head { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.tag.kind-decision { color: var(--accent); }
+.tag.kind-gotcha { color: var(--urgent); }
+.tag.kind-convention { color: var(--ok); }
+
+.timeline { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 4px; }
+.timeline li { display: flex; gap: 8px; align-items: baseline; font-size: 13.5px;
+               padding: 7px 0; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+.timeline .when { color: var(--muted); font-family: ui-monospace, monospace;
+                  font-size: 11.5px; flex: none; }
+.timeline .kind { font-size: 11px; padding: 0 5px; border-radius: 3px;
+                  background: var(--panel-2); color: var(--muted); flex: none; }
+.timeline .kind.k-decision { color: var(--accent); }
+.timeline .kind.k-blocker { color: var(--urgent); }
+.timeline .kind.k-milestone { color: var(--ok); }
+.timeline .actor { font-size: 11px; color: var(--muted); flex: none; }
+.timeline .entry { flex: 1 1 100%; }
+.timeline .detail { white-space: pre-wrap; }
+
+#panel.loading { opacity: .55; transition: opacity .1s; }
+
+/* ==================================================================
+   Écrans larges
+   ================================================================== */
+
+@media (min-width: 900px) {
+  body { display: flex; }
+  /* `inset: auto` d'abord : posé après, il annulerait le `top: 0` dont
+     l'ancrage collant a besoin. */
+  .sidebar { inset: auto; position: sticky; top: 0; align-self: flex-start;
+             height: 100vh; transform: none;
+             flex: 0 0 var(--sidebar-w); width: var(--sidebar-w); }
+  .main { flex: 1; }
+  .menu-toggle, .drawer-only, .search-link { display: none; }
+  .topbar-search { display: block; }
+  body.drawer-open .overlay { display: none; }
+  body.drawer-open { overflow: auto; }
+  .content { padding: 22px 26px 60px; max-width: 1180px; }
+  .two-cols { grid-template-columns: 1fr 1fr; }
+  .tabs a { padding: 10px 15px; }
+  /* Les colonnes se partagent la largeur au lieu de déborder : sur grand écran
+     le kanban doit tenir d'un seul regard, sans défilement horizontal. */
+  .kcol { flex: 1 1 0; min-width: 0; }
+
+  /* Vrai plateau : la page ne défile plus, le tableau occupe la hauteur
+     restante et chaque colonne défile chez elle. Les quatre en-têtes restent
+     donc visibles quelle que soit la longueur d'une colonne.
+     Réservé au grand écran : sur téléphone, l'en-tête du projet mangerait la
+     moitié de la hauteur et il ne resterait rien pour les cartes. */
+  body.kanban-view { height: 100vh; overflow: hidden; }
+  body.kanban-view .main { height: 100vh; min-height: 0; }
+  body.kanban-view .content {
+    display: flex; flex-direction: column; min-height: 0;
+    overflow: hidden; max-width: none; padding-bottom: 16px;
+  }
+  body.kanban-view #panel { display: flex; flex-direction: column;
+                            flex: 1; min-height: 0; }
+  body.kanban-view .kanban { flex: 1; min-height: 0; align-items: stretch; }
+  body.kanban-view .kcol { display: flex; flex-direction: column;
+                           max-height: 100%; min-height: 0; }
+  body.kanban-view .kcards { flex: 1; min-height: 0; overflow-y: auto;
+                             padding-right: 2px; }
+
+  /* La hauteur est un budget : tout ce que l'en-tête prend, les cartes le
+     perdent. On masque en vue plateau ce qui est consultable ailleurs — la
+     description, la barre d'avancement, le chemin du dépôt — en gardant le
+     titre, le pourcentage, les onglets et le basculement de vue. */
+  body.kanban-view .head-main p,
+  body.kanban-view .head-meta,
+  body.kanban-view .page-head + .progress { display: none; }
+  body.kanban-view .page-head { margin-bottom: 4px; }
+  body.kanban-view .tabs { margin: 10px 0 4px; }
+  body.kanban-view .view-switch { margin: 2px 0 6px; }
+  body.kanban-view #panel > details.inline-form { margin: 2px 0 8px; }
+  .task { flex-wrap: nowrap; }
+  .handle { display: block; }
+  .task-selects { order: 0; }
+  .task-body { flex: 1; order: 0; }
+  .task-body > summary { flex-direction: row; justify-content: space-between;
+                         align-items: baseline; gap: 10px; flex-wrap: wrap; }
+  .timeline li { flex-wrap: nowrap; }
+  .timeline .entry { flex: 1; }
+  input, select, textarea { font-size: 13.5px; }
+}
+
+/* Réponse à la question d'un agent : des options cliquables et un champ libre.
+   Les options sont une commodité — la vraie sortie reste le texte. */
+.answer-box { display: flex; flex-direction: column; gap: 5px;
+              background: rgba(224, 175, 104, .08); border-radius: 6px; padding: 7px; }
+.answer-box .reco { font-size: 11.5px; color: var(--warn); }
+.option-btn { width: 100%; text-align: left; font-size: 12px; padding: 6px 9px;
+              min-height: 0; background: var(--panel); border-color: var(--border);
+              white-space: normal; line-height: 1.4; }
+.option-btn:hover { border-color: var(--ok); color: var(--ok); }
+
+/* Branche d'agent et état de sa fusion. */
+.kcard-branch { font-size: 11.5px; color: var(--muted); display: flex;
+                align-items: center; gap: 6px; flex-wrap: wrap; }
+.tag.merge-requested { background: rgba(224, 175, 104, .18); color: var(--warn); }
+.tag.merge-merged { background: rgba(158, 206, 106, .18); color: var(--ok); }
+.tag.merge-conflict { background: rgba(247, 118, 142, .18); color: var(--urgent); }
+/* Fusion défaite parce que la base ne tenait plus — la branche, elle, est
+   conservée : il y a du travail à récupérer, pas seulement un échec à constater. */
+.tag.merge-reverted { background: rgba(224, 175, 104, .18); color: var(--warn); }
+.tag.merge-broken { background: rgba(247, 118, 142, .28); color: var(--urgent); }
+
+/* Lien vers l'instance d'essai d'une tâche en vérification. */
+.preview-link { display: inline-flex; align-items: center; gap: 6px; font-size: 12px;
+                background: rgba(158, 206, 106, .14); color: var(--ok);
+                border: 1px solid rgba(158, 206, 106, .35); border-radius: 7px;
+                padding: 6px 10px; align-self: flex-start; }
+.preview-link:hover { text-decoration: none; border-color: var(--ok); }
+
+/* Où l'agent travaille : rappelé sur la page de son journal. */
+.run-where { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center;
+             font-size: 12.5px; color: var(--muted); background: var(--panel);
+             border: 1px solid var(--border); border-radius: var(--radius);
+             padding: 9px 12px; margin-bottom: 12px; }
+
+/* Un filtre actif doit se voir : sinon une colonne vide se lit comme « rien à
+   faire » au lieu de « rien qui porte ce tag ». */
+.filter-note { font-size: 11.5px; color: var(--high); background: rgba(255, 158, 100, .14);
+               border-radius: 10px; padding: 3px 9px; }
+
+/* Ce qui se passe ailleurs que sur le projet affiché : présent, mais en retrait. */
+.elsewhere { color: var(--muted); font-size: 12.5px; }
+.qdot.elsewhere-dot { background: var(--muted); }
+
+/* Le diff d'une branche d'agent — la pièce sur laquelle porte la relecture. */
+.patch { margin: 14px 0; }
+.patch-file { border: 1px solid var(--border); border-radius: var(--radius);
+              margin-bottom: 8px; background: var(--panel); overflow: hidden; }
+.patch-file > summary { display: flex; align-items: center; gap: 10px;
+                        padding: 9px 12px; font-size: 12.5px; flex-wrap: wrap; }
+.patch-counts { margin-left: auto; font-size: 11.5px; display: flex; gap: 8px; }
+.patch-counts .plus { color: var(--ok); }
+.patch-counts .minus { color: var(--urgent); }
+.patch-body { margin: 0; padding: 8px 0; background: var(--bg); font-size: 11.5px;
+              line-height: 1.55; overflow-x: auto; max-height: 60vh; }
+.patch-body span { display: block; padding: 0 12px; white-space: pre; }
+.patch-body .l-add { background: rgba(158, 206, 106, .12); color: #b8e08a; }
+.patch-body .l-del { background: rgba(247, 118, 142, .12); color: #f2a0ae; }
+.patch-body .l-hunk { color: var(--accent); background: rgba(122, 162, 247, .08); }
+.patch-body .l-ctx { color: var(--muted); }
+
+/* Fichiers ajoutés que rien n'appelle : le piège du module livré avec son test. */
+.orphans { background: rgba(224, 175, 104, .12); border: 1px solid rgba(224, 175, 104, .4);
+           border-radius: var(--radius); padding: 10px 12px; margin-bottom: 12px;
+           font-size: 13px; }
+.orphans ul { margin: 6px 0 0; padding-left: 20px; }
+.orphans li { font-size: 12px; }
+
+/* --------------------------------------------------------------------------
+   Markdown rendu (app/markup.py) — ce qu'écrivent les agents.
+   Portée limitée à `.md` : le reste de l'interface garde ses propres règles.
+   Un tableau large défile dans son cadre plutôt que d'élargir la page, sinon
+   la lecture sur téléphone impose un défilement horizontal du document entier.
+   -------------------------------------------------------------------------- */
+.md > *:first-child { margin-top: 0; }
+.md > *:last-child { margin-bottom: 0; }
+.md p { margin: 0 0 .6em; line-height: 1.55; }
+.md h3, .md h4, .md h5, .md h6 { margin: 1.1em 0 .45em; line-height: 1.3; }
+.md h3 { font-size: 1.05rem; }
+.md h4 { font-size: .98rem; }
+.md h5, .md h6 { font-size: .92rem; color: var(--muted); }
+.md ul, .md ol { margin: 0 0 .6em; padding-left: 1.35em; }
+.md li { margin: .18em 0; line-height: 1.5; }
+.md code {
+  background: var(--panel-2); border: 1px solid var(--border);
+  border-radius: 4px; padding: .05em .32em;
+  font-size: .88em; word-break: break-word;
+}
+.md pre.md-code {
+  background: var(--panel-2); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: .7em .85em; margin: 0 0 .7em;
+  overflow-x: auto; font-size: .86rem; line-height: 1.45;
+}
+.md pre.md-code code { background: none; border: 0; padding: 0; }
+.md blockquote {
+  margin: 0 0 .7em; padding: .1em 0 .1em .8em;
+  border-left: 3px solid var(--border); color: var(--muted);
+}
+.md hr { border: 0; border-top: 1px solid var(--border); margin: 1em 0; }
+.md a { color: var(--accent); }
+.md table {
+  display: block; width: max-content; max-width: 100%;
+  overflow-x: auto; border-collapse: collapse; margin: 0 0 .7em;
+  font-size: .9rem;
+}
+.md th, .md td {
+  border: 1px solid var(--border); padding: .35em .6em; text-align: left;
+  vertical-align: top;
+}
+.md th { background: var(--panel-2); font-weight: 600; }
+.md strong { color: #fff; font-weight: 600; }
+
+/* Résumé de journal : mise en forme au fil du texte, sans paragraphe autour. */
+.md-ligne code { background: var(--panel-2); border: 1px solid var(--border);
+                 border-radius: 4px; padding: .05em .3em; }
+.md-ligne strong { color: #fff; font-weight: 600; }
+/* Le détail d'une entrée reste en petit et en gris : le markdown ne doit pas
+   lui rendre la taille du texte courant, sinon il vole la vedette au résumé. */
+.detail.md p, .detail.md li { font-size: inherit; }
+.detail.md > *:first-child { margin-top: 0; }
+.detail.md > *:last-child { margin-bottom: 0; }
+
+/* ==================================================================
+   Fiche projet : sous-menu ancré et cartes.
+   Cinq sections empilées faisaient une page à dérouler sans fin, et
+   l'index de documentation (27 entrées sur mare) l'a rendue illisible.
+   Tout repose sur des ancres et des <details> — aucun JavaScript, donc
+   rien ne disparaît quand il est absent.
+   ================================================================== */
+
+.fiche-menu {
+  position: sticky; top: var(--topbar-h); z-index: 30;
+  display: flex; gap: 8px; overflow-x: auto;
+  padding: 10px 0; margin: -4px 0 4px;
+  background: var(--bg);
+  /* Sur mobile on fait défiler le menu du doigt : pas de barre visible,
+     mais on garde le défilement. */
+  scrollbar-width: none;
+}
+.fiche-menu::-webkit-scrollbar { display: none; }
+
+.fiche-pill {
+  display: inline-flex; align-items: center; gap: 7px; flex: none;
+  padding: 7px 12px; border: 1px solid var(--border); border-radius: 999px;
+  background: var(--panel); color: var(--text); font-size: 13px;
+  white-space: nowrap;
+}
+.fiche-pill:hover { border-color: var(--accent); text-decoration: none; }
+.fiche-pill-ico { font-size: 14px; line-height: 1; }
+.fiche-pill-compte {
+  background: var(--panel-2); color: var(--muted);
+  border-radius: 999px; padding: 0 7px; font-size: 11.5px; min-width: 20px;
+  text-align: center;
+}
+.fiche-pill-compte.vide { opacity: .45; }
+
+/* Une ancre sous une barre collante atterrit derrière elle : on réserve
+   la hauteur du bandeau et du menu. */
+.profile-block[id] { scroll-margin-top: calc(var(--topbar-h) + 56px); }
+.profile-block + .profile-block { margin-top: 26px; }
+.profile-block h2 { display: flex; align-items: center; gap: 8px; }
+
+.fiche-grid {
+  display: grid; gap: 10px; margin: 0 0 12px;
+  grid-template-columns: repeat(auto-fill, minmax(270px, 1fr));
+}
+
+.fiche-carte {
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 11px 12px;
+  display: flex; flex-direction: column; gap: 7px; min-width: 0;
+}
+/* Ce qui n'est pas encore documenté se voit d'un coup d'œil, sans crier. */
+.fiche-carte.incomplete { border-style: dashed; }
+.fiche-carte header {
+  display: flex; align-items: center; gap: 7px; flex-wrap: wrap;
+  min-width: 0;
+}
+.fiche-carte header strong, .fiche-carte header > code { min-width: 0; overflow-wrap: anywhere; }
+/* Le bouton de suppression se pousse à droite et reste discret. */
+.fiche-carte header form { margin-left: auto; }
+.fiche-carte header button.danger {
+  background: transparent; border-color: transparent; padding: 2px 6px;
+  min-height: 24px; opacity: .5;
+}
+.fiche-carte:hover header button.danger { opacity: 1; }
+
+.fiche-code {
+  margin: 0; padding: .5em .65em; border-radius: 7px;
+  background: var(--panel-2); border: 1px solid var(--border);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px;
+  overflow-x: auto; white-space: pre;
+}
+.fiche-var { font-size: 13px; color: var(--accent); }
+.fiche-lien { font-size: 13px; overflow-wrap: anywhere; }
+.fiche-note { margin: 0; font-size: 12.5px; line-height: 1.5; color: var(--muted); }
+.fiche-meta {
+  display: flex; flex-wrap: wrap; gap: 4px 12px;
+  font-size: 12px; color: var(--muted);
+}
+.fiche-meta code { font-size: 11.5px; }
+
+.fiche-groupe { margin: 0 0 10px; }
+.fiche-groupe > summary {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 7px 0; border-bottom: 1px solid var(--border); margin-bottom: 10px;
+}
+.fiche-groupe > summary::before { content: "▸"; color: var(--muted); }
+.fiche-groupe[open] > summary::before { content: "▾"; }
+
+.fiche-edit { margin-top: auto; }
+.fiche-edit > summary { display: inline-block; }
+.fiche-edit form { display: flex; gap: 6px; margin-top: 7px; }
+.fiche-edit input { flex: 1; min-width: 0; }
+
+@media (max-width: 560px) {
+  .fiche-grid { grid-template-columns: 1fr; }
+  .fiche-pill-nom { display: none; }   /* icône + compte suffisent au pouce */
+  .fiche-pill { padding: 8px 11px; }
+}
+
+/* ------------------------------------------------------------------
+   Fiche projet — corrections après relecture du rendu mobile réel.
+   Trois défauts constatés à 390 px : des pastilles réduites à un
+   émoji et un nombre, le bouton de suppression qui saute à la ligne
+   dès qu'un titre est long (trou vertical de 40 px), et des URL de
+   fichier affichées en entier.
+   ------------------------------------------------------------------ */
+
+/* Une icône seule ne dit rien : le libellé court reste, toujours. */
+@media (max-width: 560px) {
+  .fiche-pill-nom { display: inline; }
+  .fiche-pill { padding: 6px 10px; font-size: 12.5px; gap: 5px; }
+  .fiche-pill-ico { font-size: 12.5px; }
+  .fiche-pill-compte { padding: 0 5px; font-size: 11px; min-width: 16px; }
+}
+
+/* Le ✕ se pose dans le coin, hors du flux : il ne peut plus être
+   renvoyé à la ligne par un titre qui enveloppe. */
+.fiche-carte { position: relative; padding: 9px 10px; gap: 5px; }
+.fiche-carte header { padding-right: 22px; gap: 6px; }
+.fiche-carte header form { position: absolute; top: 5px; right: 5px; margin: 0; }
+.fiche-carte header strong { font-size: 13.5px; }
+.fiche-carte header > code { font-size: 12.5px; }
+
+/* Une URL longue se coupe proprement plutôt que d'occuper trois lignes.
+   Le titre du lien porte l'adresse entière pour qui veut la lire. */
+.fiche-lien {
+  display: block; white-space: nowrap; overflow: hidden;
+  text-overflow: ellipsis; max-width: 100%;
+}
+
+.fiche-code { font-size: 12px; padding: .42em .55em; }
+.fiche-note { font-size: 12px; }
+.profile-block + .profile-block { margin-top: 20px; }
+.profile-block > h2 { margin: 20px 0 8px; }
+.profile-block > p.muted { margin: 0 0 8px; }
+
+/* ------------------------------------------------------------------
+   En-tête de projet sur mobile : il consommait 700 px avant le moindre
+   contenu, sur un écran qui en fait 844. Mesuré sur la fiche de mare.
+   Rien n'est supprimé — tout reste lisible, mais plus rien ne prend
+   plus de place que ce qu'il apporte.
+   ------------------------------------------------------------------ */
+@media (max-width: 700px) {
+  .project-head h1 { font-size: 19px; }
+  .project-head .head-stats .big { font-size: 26px; }
+
+  /* La description tient en deux lignes, dépliables d'un appui. Six
+     lignes de prose repoussaient les onglets hors de l'écran. */
+  .project-head .head-main > p.muted {
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+    overflow: hidden; margin: 4px 0 0; font-size: 13px; line-height: 1.45;
+  }
+  .project-head .head-main > p.muted:active { -webkit-line-clamp: unset; }
+
+  /* Le chemin du dépôt ne sert à rien depuis un téléphone : il se réduit
+     au nom du répertoire plutôt que d'occuper une ligne entière. */
+  .head-meta { gap: 6px 10px; }
+  .head-meta .mono {
+    max-width: 42vw; overflow: hidden; text-overflow: ellipsis;
+    white-space: nowrap; direction: rtl; text-align: left;
+  }
+
+  .progress { margin: 6px 0; }
+  .project-head + .progress + .head-meta + .inline-form > summary.btn {
+    padding: 5px 10px; font-size: 12.5px; min-height: 30px;
+  }
+}
+
+/* Sept onglets ne tiennent pas dans 390 px : la barre défile déjà, mais
+   rien ne le disait. Un dégradé sur le bord droit annonce la suite. */
+.tabs { position: relative; }
+.tabs-wrap { position: relative; }
+.tabs-wrap::after {
+  content: ""; position: absolute; top: 0; right: 0; bottom: 0; width: 28px;
+  pointer-events: none;
+  background: linear-gradient(to right, transparent, var(--bg));
+}
+
+/* Lecture d'un fichier de documentation, lu dans le dépôt à la volée. */
+.doc-titre code { font-size: 17px; overflow-wrap: anywhere; }
+.doc-lien { color: inherit; }
+.doc-lien:hover code { color: var(--accent); }
+.doc-corps {
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 14px 16px; margin-top: 12px;
+  max-width: 78ch;
+}
+@media (max-width: 700px) { .doc-corps { padding: 12px; } }
+
+/* D'où vient le texte affiché : branche, commit, ou copie de travail. */
+.doc-source {
+  display: flex; align-items: center; gap: 8px 10px; flex-wrap: wrap;
+  padding: 8px 10px; margin-top: 10px;
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.doc-branches { margin-left: auto; display: flex; gap: 6px; align-items: center; }
+.doc-branches select { max-width: 46vw; }
+
+/* Édition d'un fichier de documentation, depuis le manager. */
+.doc-edition { margin-top: 14px; }
+.doc-editeur {
+  width: 100%; margin: 8px 0; padding: 10px;
+  background: var(--panel-2); color: var(--text);
+  border: 1px solid var(--border); border-radius: var(--radius);
+  font-size: 12.5px; line-height: 1.5; resize: vertical;
+  /* Le retour à la ligne automatique évite un défilement horizontal sur
+     téléphone, où l'on tape avec le pouce. */
+  white-space: pre-wrap; overflow-wrap: anywhere;
+}
+
+/* Checklist : les sous-tâches d'une tâche */
+.checklist { margin: 8px 0 10px; }
+.checklist ul { list-style: none; margin: 0 0 6px; padding: 0; }
+.check-item { display: flex; align-items: center; gap: 8px; padding: 2px 0; }
+.check-item .check-title { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.check-item.closed .check-title { text-decoration: line-through; color: var(--muted); }
+.check-box, .check-remove { background: transparent; border: 0; padding: 0 2px; cursor: pointer;
+  color: var(--muted); font-size: 16px; line-height: 1; }
+.check-box:hover { color: var(--accent); }
+.check-item.closed .check-box { color: var(--ok); }
+.check-remove { opacity: 0; font-size: 15px; }
+.check-item:hover .check-remove, .check-remove:focus { opacity: 1; }
+.check-remove:hover { color: var(--urgent); }
+@media (hover: none) { .check-remove { opacity: .6; } }
+.check-add input { width: 100%; background: transparent; border: 1px dashed var(--border); }
+.tag.checklist-count { background: transparent; border: 1px solid var(--border); }
+.tag.checklist-count.complete { color: var(--ok); border-color: currentColor; }
+
+/* Cases `- [ ]` des descriptions de tâches */
+.task-md { font-size: 13.5px; margin: 6px 0 8px; }
+.md li.md-check { list-style: none; margin-left: -1.35em; display: flex; gap: 6px; align-items: baseline; }
+.md li.md-check form { display: inline; }
+.md li.md-check.done { color: var(--muted); }
+.md-box { background: transparent; border: 0; padding: 0 2px; font-size: 15px; line-height: 1;
+  color: var(--muted); cursor: pointer; }
+button.md-box:hover { color: var(--accent); }
+.md-check.done .md-box { color: var(--ok); }
+
+/* Bandeau d'activité en direct, en tête de projet */
+.live-strip { display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: center;
+  font-size: 12.5px; padding: 6px 10px; margin: 8px 0; border-radius: 6px;
+  border: 1px solid var(--border); }
+.live-strip.busy { border-color: var(--ok); background: rgba(158, 206, 106, .07); }
+.live-strip.recent { border-color: var(--accent); }
+.live-item { display: inline-flex; gap: 6px; align-items: center; min-width: 0; overflow-wrap: anywhere; }
+a.live-item { color: inherit; text-decoration: none; }
+a.live-item:hover { color: var(--accent); }
+#panel.live-flash { animation: live-flash .9s ease-out; }
+@keyframes live-flash { from { box-shadow: 0 0 0 2px rgba(122, 162, 247, .35); } to { box-shadow: none; } }
+@media (prefers-reduced-motion: reduce) { #panel.live-flash { animation: none; } }
+
+/* Raison d'abandon d'une tâche */
+.tag.cancel-reason { background: transparent; color: var(--muted); font-style: italic; white-space: normal; }
+.check-reason { color: var(--muted); font-style: italic; font-size: 12px; min-width: 0; overflow-wrap: anywhere; }

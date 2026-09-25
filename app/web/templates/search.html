@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Recherche — claude-manager{% endblock %}
+{% block content %}
+<header class="page-head">
+  <div class="head-main">
+    <h1>Recherche</h1>
+    <p class="muted small">Tâches, mémoires, journal, jalons, ressources et technologies.</p>
+  </div>
+</header>
+
+<form class="grid-form wide" method="get" action="/search">
+  <label class="wide">Mots-clés
+    <input type="search" name="q" value="{{ q }}" autofocus>
+  </label>
+  <label>Projet
+    <select name="project">
+      <option value="">tous les projets</option>
+      {% for p in projects %}
+        <option value="{{ p.slug }}" {% if selected == p.slug %}selected{% endif %}>{{ p.name }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <button type="submit">Chercher</button>
+</form>
+
+{% if q %}
+  {% set tab_of = {'task': 'tasks', 'memory': 'memory', 'journal': 'journal',
+                   'milestone': 'milestones', 'resource': 'profile',
+                   'technology': 'stack', 'command': 'profile',
+                   'service': 'profile', 'env_var': 'profile'} %}
+  <h2>{{ results|length }} résultat(s)</h2>
+  <ul class="rows">
+    {% for r in results %}
+    <li class="row-card">
+      <div class="row-top">
+        <span class="tag">{{ r.entity_type }}</span>
+        <span class="row-name">
+          {% if r.project_slug %}
+            <a href="/p/{{ r.project_slug }}/{{ tab_of.get(r.entity_type, 'tasks') }}">{{ r.title }}</a>
+          {% else %}{{ r.title }}{% endif %}
+        </span>
+        {% if r.project_slug %}<span class="muted small">{{ r.project_slug }}</span>{% endif %}
+      </div>
+      {% if r.excerpt %}<div class="row-note">{{ r.excerpt }}</div>{% endif %}
+    </li>
+    {% else %}
+      <li class="muted small">Aucun résultat.</li>
+    {% endfor %}
+  </ul>
+{% endif %}
+{% endblock %}

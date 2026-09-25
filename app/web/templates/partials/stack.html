@@ -1,0 +1,119 @@
+{% macro tech_form(t) %}
+<form class="panel-form grid-form" method="post" action="/p/{{ project.slug }}/stack/set">
+  <input type="hidden" name="name" value="{{ t.name }}">
+  <label>Catégorie
+    <select name="category">
+      {% for c in tech_categories %}
+        <option value="{{ c }}" {% if t.category == c %}selected{% endif %}>{{ c }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>Version <input name="version" value="{{ t.version or '' }}"></label>
+  <label>Rôle <input name="role" value="{{ t.role or '' }}"></label>
+  <label>Statut
+    <select name="status">
+      {% for s in tech_statuses %}
+        <option value="{{ s }}" {% if t.status == s %}selected{% endif %}>{{ s }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label class="wide">Pourquoi ce choix, ou pourquoi abandonné
+    <input name="notes" value="{{ t.notes or '' }}">
+  </label>
+  <button type="submit">Enregistrer</button>
+</form>
+<form class="panel-form" method="post" action="/p/{{ project.slug }}/stack/remove"
+      data-confirm="Retirer {{ t.name }} de ce projet ?">
+  <input type="hidden" name="name" value="{{ t.name }}">
+  <button type="submit" class="danger small">Retirer du projet</button>
+</form>
+{% endmacro %}
+
+<div class="row-actions">
+  <form class="panel-form" method="post" action="/p/{{ project.slug }}/stack/scan">
+    <button type="submit" class="btn">⟳ Détecter depuis les fichiers</button>
+  </form>
+  <span class="muted small">Lit package.json, pyproject.toml, Dockerfile, docker-compose…
+    sans écraser ce que tu as saisi à la main.</span>
+</div>
+
+<details class="inline-form">
+  <summary class="btn">+ Ajouter une technologie</summary>
+  <form class="panel-form grid-form" method="post" action="/p/{{ project.slug }}/stack/set">
+    <label>Nom <input name="name" placeholder="PostgreSQL" required></label>
+    <label>Catégorie
+      <select name="category">
+        {% for c in tech_categories %}<option value="{{ c }}">{{ c }}</option>{% endfor %}
+      </select>
+    </label>
+    <label>Version <input name="version"></label>
+    <label>Rôle <input name="role" placeholder="base principale"></label>
+    <label>Statut
+      <select name="status">
+        {% for s in tech_statuses %}<option value="{{ s }}">{{ s }}</option>{% endfor %}
+      </select>
+    </label>
+    <label class="wide">Pourquoi <input name="notes"></label>
+    <button type="submit">Ajouter</button>
+  </form>
+</details>
+
+{% for status, label in [('active', 'En usage'), ('considered', 'Envisagé'), ('deprecated', 'Abandonné')] %}
+  {% set items = technologies|selectattr('status', 'equalto', status)|list %}
+  {% if items %}
+  <h2>{{ label }} <span class="count">{{ items|length }}</span></h2>
+  <ul class="rows">
+    {% for t in items %}
+    <li class="row-card {% if t.status == 'deprecated' %}is-deprecated{% endif %}">
+      <div class="row-top">
+        <span class="row-name">
+          {% if t.docs_url %}<a href="{{ t.docs_url }}">{{ t.name }}</a>{% else %}{{ t.name }}{% endif %}
+        </span>
+        <span class="tag">{{ t.category }}</span>
+        {% if t.version %}<span class="mono muted">{{ t.version }}</span>{% endif %}
+        {% if t.source == 'scan' %}<span class="tag scan" title="détecté automatiquement">auto</span>{% endif %}
+      </div>
+      {% if t.role %}<div class="row-facts"><span>Rôle : <b>{{ t.role }}</b></span></div>{% endif %}
+      {% if t.notes %}<div class="row-note">{{ t.notes }}</div>{% endif %}
+      <details class="row-edit">
+        <summary class="btn ghost small">Modifier</summary>
+        {{ tech_form(t) }}
+      </details>
+    </li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+{% endfor %}
+
+{% if not technologies %}
+  <p class="muted">Stack vide. Lance la détection automatique ci-dessus.</p>
+{% endif %}
+
+<h2>Préférences techniques générales</h2>
+<p class="muted small">Valables pour tous les projets — elles orientent ce que Claude propose.</p>
+<ul class="flat-list">
+  {% for p in preferences %}
+    <li><span class="tag level-{{ p.preference_level }}">{{ p.preference_level }}</span>
+      <strong>{{ p.name }}</strong> <span class="muted">{{ p.preference }}</span></li>
+  {% else %}
+    <li class="muted">Aucune préférence enregistrée.</li>
+  {% endfor %}
+</ul>
+<details class="inline-form">
+  <summary class="btn ghost">+ Ajouter une préférence</summary>
+  <form class="panel-form grid-form" method="post" action="/preferences/set">
+    <input type="hidden" name="slug" value="{{ project.slug }}">
+    <label>Technologie <input name="name" required></label>
+    <label class="wide">Préférence
+      <input name="preference" placeholder="à privilégier pour toute API Python" required>
+    </label>
+    <label>Niveau
+      <select name="level">
+        <option value="preferred">à privilégier</option>
+        <option value="neutral">neutre</option>
+        <option value="avoid">à éviter</option>
+      </select>
+    </label>
+    <button type="submit">Enregistrer</button>
+  </form>
+</details>

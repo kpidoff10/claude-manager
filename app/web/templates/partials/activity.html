@@ -1,0 +1,20 @@
+{# Bandeau « qui travaille ici, maintenant », rafraîchi par /p/<slug>/live. #}
+{% set a = activity %}
+<div class="live-strip {{ 'busy' if a.runs or a.working else ('recent' if a.recent else 'idle') }}">
+  {% for r in a.runs %}
+    <a class="live-item" href="/runs/{{ r.id }}">
+      <span class="pulse"></span> Agent sur <strong>#{{ r.task_id }}</strong> {{ r.title[:60] }} — voir en direct
+    </a>
+  {% endfor %}
+  {% for t in a.working %}
+    <span class="live-item"><span class="qdot running"></span> En cours : <strong>#{{ t.id }}</strong> {{ t.title[:60] }}</span>
+  {% endfor %}
+  {% if a.last_journal %}
+    <span class="live-item muted" title="{{ a.last_journal.summary }}">
+      {% if a.recent and not (a.runs or a.working) %}<span class="qdot running"></span>{% endif %}
+      Dernière action {{ a.last_age }} : {{ a.last_journal.summary[:110] }}{% if a.last_journal.summary|length > 110 %}…{% endif %}
+    </span>
+  {% elif not (a.runs or a.working) %}
+    <span class="live-item muted">Aucune activité consignée.</span>
+  {% endif %}
+</div>

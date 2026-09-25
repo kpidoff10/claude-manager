@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+{% block content %}
+<header class="page-head">
+  <div class="head-main">
+    <h1>Tableau de bord</h1>
+    <p class="muted small">{{ projects|length }} projet(s) · ce qui est prioritaire et ce qui vient de bouger.</p>
+  </div>
+  <a class="btn" href="#nouveau-projet">+ Nouveau projet</a>
+</header>
+
+{% if orphans %}
+{# Une tâche « en cours » sans exécution vivante ne bouge plus toute seule : la
+   file ne prend que les tâches en file, et rien ne signalait l'écart. C'est ce
+   qui a laissé mare #142 immobile sans que personne ne s'en aperçoive. #}
+<div class="orphans">
+  <strong>⚠ {{ orphans|length }} tâche(s) « en cours » que plus aucun agent ne porte</strong>
+  <span class="muted">— marquées en cours puis laissées là. La file ne les
+    réclamera pas : elle ne prend que les tâches mises en file. Si tu la traites
+    encore à la main, il n'y a rien à faire.</span>
+  <ul class="rows">
+    {% for t in orphans %}
+      <li class="row-card">
+        <div class="row-top">
+          <a href="/p/{{ t.project_slug }}/tasks?view=kanban">#{{ t.id }} {{ t.title }}</a>
+          <span class="muted small">{{ t.project_name }} · sans activité depuis
+            {% if t.idle_minutes >= 120 %}{{ t.idle_minutes // 60 }} h{% else %}{{ t.idle_minutes }} min{% endif %}</span>
+        </div>
+        <div class="row-actions">
+          <form method="post" action="/p/{{ t.project_slug }}/tasks/{{ t.id }}/update">
+            <input type="hidden" name="status" value="queued">
+            <button type="submit" class="btn small">Remettre en file</button>
+          </form>
+          <form method="post" action="/p/{{ t.project_slug }}/tasks/{{ t.id }}/update">
+            <input type="hidden" name="status" value="todo">
+            <button type="submit" class="btn ghost small">Renvoyer à faire</button>
+          </form>
+          <form method="post" action="/p/{{ t.project_slug }}/tasks/{{ t.id }}/update">
+            <input type="hidden" name="status" value="done">
+            <button type="submit" class="btn ghost small">Marquer terminée</button>
+          </form>
+        </div>
+      </li>
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}
+
+<section class="cards">
+  {% for p in projects %}
+  <a class="card project-card" href="/p/{{ p.slug }}/tasks">
+    <div class="card-head">
+      <h2>{{ p.name }}</h2>
+      <span class="tag status-{{ p.status }}">{{ p.status }}</span>
+    </div>
+    {% if p.tags %}<div>{% for tag in p.tags %}<span class="tag">#{{ tag }}</span> {% endfor %}</div>{% endif %}
+    {% if p.description %}<p class="muted small">{{ p.description }}</p>{% endif %}
+    <div class="progress"><div class="bar" style="width: {{ p.progress }}%"></div></div>
+    <div class="card-stats">
+      <span><strong>{{ p.progress }}%</strong></span>
+      <span>{{ p.tasks_open }} ouvertes</span>
+      {% if p.tasks_in_progress %}<span class="in-progress">{{ p.tasks_in_progress }} en cours</span>{% endif %}
+      {% if p.tasks_blocked %}<span class="blocked">{{ p.tasks_blocked }} bloquées</span>{% endif %}
+      {% if p.tasks_hot %}<span class="hot">{{ p.tasks_hot }} prioritaires</span>{% endif %}
+    </div>
+    {% if p.last_activity %}
+      <div class="muted small">Dernière activité : {{ p.last_activity[:16]|replace('T', ' ') }}</div>
+    {% endif %}
+  </a>
+  {% else %}
+    <p class="muted">Aucun projet pour l'instant. Crée le premier ci-dessous.</p>
+  {% endfor %}
+</section>
+
+<div class="two-cols">
+  <section>
+    <h2>Priorités du moment</h2>
+    <ul class="flat-list">
+      {% for t in hot_tasks %}
+      <li>
+        <span class="prio p{{ t.priority }}">{{ t.priority_label }}</span>
+        <a href="/p/{{ t.project_slug }}/tasks">{{ t.title }}</a>
+        <span class="muted small">{{ t.project_name }} · {{ t.status }}</span>
+      </li>
+      {% else %}
+        <li class="muted small">Rien de prioritaire. Passe une tâche en « high » ou
+          « urgent » pour la faire remonter ici.</li>
+      {% endfor %}
+    </ul>
+  </section>
+
+  <section>
+    <h2>Activité récente</h2>
+    <ul class="timeline">
+      {% for j in journal %}
+      <li>
+        <span class="when">{{ j.created_at[:16]|replace('T', ' ') }}</span>
+        <span class="kind k-{{ j.kind }}">{{ j.kind }}</span>
+        <span class="entry">
+          <a href="/p/{{ j.project_slug }}/journal">{{ j.project_slug }}</a> — {{ j.summary | markdown_ligne }}
+        </span>
+      </li>
+      {% else %}
+        <li class="muted small">Rien encore. Le journal se remplit à mesure que Claude travaille.</li>
+      {% endfor %}
+    </ul>
+  </section>
+</div>
+
+<h2 id="nouveau-projet">Nouveau projet</h2>
+<form method="post" action="/projects/new" class="grid-form">
+  <label>Slug <input name="slug" placeholder="mon-projet" required></label>
+  <label>Nom affiché <input name="name"></label>
+  <label class="wide">Chemin sur le disque
+    <input name="path" placeholder="/home/dev/projects/mon-projet">
+  </label>
+  <label class="wide">Description <input name="description"></label>
+  <label class="wide">Tags <input name="tags" placeholder="pro, client-x"></label>
+  <label class="check"><input type="checkbox" name="scan" value="1" checked> détecter la stack</label>
+  <button type="submit">Créer</button>
+</form>
+{% endblock %}

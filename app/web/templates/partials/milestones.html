@@ -1,0 +1,109 @@
+{% import "partials/_task_forms.html" as tf %}
+
+{% macro milestone_task(t) %}
+<li class="task status-{{ t.status }} p{{ t.priority }}">
+  {{ tf.selects(project, t, statuses, priorities, 'milestones') }}
+  <div class="task-body">
+    <span class="task-title">{{ t.title }}</span>
+    {{ tf.badges(t) }}
+  </div>
+</li>
+{% endmacro %}
+
+<details class="inline-form">
+  <summary class="btn">+ Nouveau jalon</summary>
+  <form class="panel-form grid-form" method="post" action="/p/{{ project.slug }}/milestones/new">
+    <input type="hidden" name="tab" value="milestones">
+    <label>Nom <input name="name" placeholder="v1, MVP, refonte auth…" required></label>
+    <label>Date cible <input name="target_date" type="date"></label>
+    <label class="wide">Ce que le jalon recouvre <input name="description"></label>
+    <button type="submit">Créer</button>
+  </form>
+</details>
+
+<ul class="milestone-list">
+  {% for m in milestones %}
+  {% set tasks = tasks_by_milestone.get(m.id, []) %}
+  <li class="milestone status-{{ m.status }}">
+    <div class="milestone-head">
+      <h3>{{ m.name }}</h3>
+      <span class="muted small"
+            title="Compté sur les tâches rattachées, pas sur le périmètre réel du jalon">
+        {{ m.tasks_done }}/{{ m.tasks_total }} tâche(s) enregistrée(s){% if m.tasks_total %} · {{ m.progress }}%{% endif %}
+      </span>
+      {% if m.target_date %}<span class="tag">cible {{ m.target_date }}</span>{% endif %}
+      <span class="tag status-{{ m.status }}">{{ m.status }}</span>
+    </div>
+    {% if m.description %}<p class="muted small">{{ m.description }}</p>{% endif %}
+    {% if m.tasks_total %}<div class="progress"><div class="bar" style="width: {{ m.progress }}%"></div></div>{% endif %}
+
+    {% if tasks %}
+      <ul class="task-list milestone-tasks">
+        {% for t in tasks %}{{ milestone_task(t) }}{% endfor %}
+      </ul>
+    {% else %}
+      <p class="muted small">Aucune tâche rattachée — le compte ci-dessus ne mesure donc rien.</p>
+    {% endif %}
+
+    <div class="milestone-actions">
+      <details>
+        <summary class="btn ghost small">+ Tâche dans ce jalon</summary>
+        <form class="panel-form grid-form" method="post" action="/p/{{ project.slug }}/tasks/new">
+          <input type="hidden" name="tab" value="milestones">
+          <input type="hidden" name="milestone_id" value="{{ m.id }}">
+          <label class="wide">Que faut-il faire ? <input name="title" required></label>
+          <label>Priorité
+            <select name="priority">
+              {% for value, label in priorities.items()|sort(reverse=true) %}
+                <option value="{{ value }}" {% if value == 2 %}selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label>Pour qui
+            <select name="owner">
+              <option value="claude">Claude</option>
+              <option value="user">moi</option>
+            </select>
+          </label>
+          <button type="submit">Ajouter</button>
+        </form>
+      </details>
+      <details>
+        <summary class="btn ghost small">Modifier le jalon</summary>
+        <form class="panel-form grid-form" method="post"
+              action="/p/{{ project.slug }}/milestones/{{ m.id }}/update">
+          <input type="hidden" name="tab" value="milestones">
+          <label>Nom <input name="name" value="{{ m.name }}"></label>
+          <label>Date cible <input name="target_date" type="date" value="{{ m.target_date or '' }}"></label>
+          <label>Statut
+            <select name="status">
+              {% for s in ['open', 'done', 'cancelled'] %}
+                <option value="{{ s }}" {% if m.status == s %}selected{% endif %}>{{ s }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label class="wide">Description <input name="description" value="{{ m.description or '' }}"></label>
+          <button type="submit">Enregistrer</button>
+        </form>
+        <form class="panel-form" method="post"
+              action="/p/{{ project.slug }}/milestones/{{ m.id }}/delete"
+              data-confirm="Supprimer le jalon « {{ m.name }} » ? Les tâches seront conservées.">
+          <input type="hidden" name="tab" value="milestones">
+          <button type="submit" class="danger small">Supprimer le jalon</button>
+        </form>
+      </details>
+    </div>
+  </li>
+  {% else %}
+  <li class="muted">Aucun jalon. Les jalons regroupent les tâches en phases et donnent
+    un avancement par phase.</li>
+  {% endfor %}
+</ul>
+
+{% if orphan_tasks %}
+<h2>Hors jalon <span class="count">{{ orphan_tasks|length }}</span></h2>
+<p class="muted small">Ces tâches ne comptent dans l'avancement d'aucun jalon.</p>
+<ul class="task-list">
+  {% for t in orphan_tasks %}{{ milestone_task(t) }}{% endfor %}
+</ul>
+{% endif %}

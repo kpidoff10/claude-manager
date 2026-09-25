@@ -1,0 +1,51 @@
+{% set icons = {'read': '👁', 'write': '✎', 'shell': '⌘', 'mcp': '🧭', 'task': '☑', 'other': '•'} %}
+
+<ol class="steps">
+  {% for step in steps %}
+    {% if step.kind == 'note' %}
+      <li class="step note"><div class="step-body muted mono">{{ step.text }}</div></li>
+    {% elif step.kind == 'text' %}
+      <li class="step say">
+        <span class="step-dot"></span>
+        {# `markdown` échappe avant de mettre en forme et ne produit qu'une liste
+           close de balises : le texte d'un agent n'est jamais du HTML de
+           confiance. Voir app/markup.py. #}
+        <div class="step-body md">{{ step.text | markdown }}</div>
+      </li>
+    {% else %}
+      <li class="step tool cat-{{ step.category }} {{ 'has-error' if step.error }}">
+        <span class="step-dot">{{ icons.get(step.category, '•') }}</span>
+        <div class="step-body">
+          <span class="tool-name">{{ step.name }}</span>
+          {% if step.label %}<span class="tool-label mono">{{ step.label }}</span>{% endif %}
+          {% if step.result %}
+            <details class="tool-result">
+              <summary>{{ '⚠ erreur' if step.error else 'réponse' }}</summary>
+              <pre class="output">{{ step.result }}</pre>
+            </details>
+          {% endif %}
+        </div>
+      </li>
+    {% endif %}
+  {% else %}
+    <li class="step note">
+      <div class="step-body muted">
+        {% if live %}L'agent vient de démarrer — les étapes apparaîtront ici au fil de son travail.
+        {% else %}Aucune étape enregistrée pour cette exécution.{% endif %}
+      </div>
+    </li>
+  {% endfor %}
+</ol>
+
+{% if meta.final %}
+<div class="run-final">
+  <div class="muted small">Mot de la fin de l'agent</div>
+  <div class="md">{{ meta.final | markdown }}</div>
+</div>
+{% endif %}
+
+{% if live %}
+<div class="live-hint muted small">
+  <span class="pulse"></span> Actualisation automatique toutes les 4 secondes.
+</div>
+{% endif %}

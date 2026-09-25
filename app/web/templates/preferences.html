@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}Préférences techniques — claude-manager{% endblock %}
+{% block content %}
+<header class="page-head">
+  <div class="head-main">
+    <h1>Préférences techniques</h1>
+    <p class="muted">Valables pour tous les projets. Elles apparaissent dans chaque briefing,
+      pour que les propositions partent de tes goûts plutôt que des miens.</p>
+  </div>
+</header>
+
+<details class="inline-form" open>
+  <summary class="btn">+ Ajouter une préférence</summary>
+  <form class="grid-form" method="post" action="/preferences/set">
+    <label>Technologie <input name="name" required></label>
+    <label>Niveau
+      <select name="level">
+        <option value="preferred">à privilégier</option>
+        <option value="neutral">neutre</option>
+        <option value="avoid">à éviter</option>
+      </select>
+    </label>
+    <label>Catégorie
+      <select name="category">
+        {% for c in tech_categories %}<option value="{{ c }}">{{ c }}</option>{% endfor %}
+      </select>
+    </label>
+    <label class="wide">Préférence
+      <input name="preference" placeholder="à privilégier pour toute API Python" required>
+    </label>
+    <button type="submit">Enregistrer</button>
+  </form>
+</details>
+
+<h2>Préférences <span class="count">{{ preferences|length }}</span></h2>
+<ul class="rows">
+  {% for p in preferences %}
+    <li class="row-card">
+      <div class="row-top">
+        <span class="tag level-{{ p.preference_level }}">{{ p.preference_level }}</span>
+        <span class="row-name">{{ p.name }}</span>
+        <span class="tag">{{ p.category }}</span>
+      </div>
+      <div class="row-note">{{ p.preference }}</div>
+    </li>
+  {% else %}
+    <li class="muted small">Aucune préférence enregistrée.</li>
+  {% endfor %}
+</ul>
+
+<h2>Catalogue des technologies <span class="count">{{ technologies|length }}</span></h2>
+<p class="muted small">Toutes les technologies vues sur l'ensemble des projets, et où elles servent.</p>
+<ul class="rows">
+  {% for t in technologies %}
+    <li class="row-card">
+      <div class="row-top">
+        <span class="row-name">
+          {% if t.docs_url %}<a href="{{ t.docs_url }}">{{ t.name }}</a>{% else %}{{ t.name }}{% endif %}
+        </span>
+        <span class="tag">{{ t.category }}</span>
+      </div>
+      <div class="row-facts">
+        {% for u in usage.get(t.name, []) %}
+          <a href="/p/{{ u.slug }}/stack" class="tag">{{ u.name }}{% if u.version %} {{ u.version }}{% endif %}{% if u.status != 'active' %} · {{ u.status }}{% endif %}</a>
+        {% else %}<span class="muted">utilisée nulle part</span>{% endfor %}
+      </div>
+    </li>
+  {% else %}
+    <li class="muted small">Catalogue vide.</li>
+  {% endfor %}
+</ul>
+{% endblock %}

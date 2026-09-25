@@ -1,0 +1,57 @@
+<p class="muted small">
+  Comment on travaille sur ce projet — ce que le dépôt ne dit pas. Ces pratiques
+  sont lues par les agents <strong>en tête du briefing</strong>, avant qu'ils
+  n'agissent.
+  <br>
+  Les conventions de <em>code</em> n'ont pas leur place ici : elles doivent
+  changer dans le même commit que ce qu'elles décrivent, donc elles vivent dans
+  le <code>CLAUDE.md</code> du dépôt.
+</p>
+
+<details class="inline-form">
+  <summary class="btn">+ Ajouter une pratique</summary>
+  <form class="grid-form panel-form" method="post" action="/p/{{ project.slug }}/method/set">
+    <input type="hidden" name="tab" value="method">
+    <label>Catégorie
+      <select name="category">
+        {% for c in practice_categories %}<option value="{{ c }}">{{ c }}</option>{% endfor %}
+      </select>
+    </label>
+    <label class="wide">Pratique
+      <input name="title" required
+             placeholder="Ce que « terminé » veut dire">
+    </label>
+    <label class="wide">Explication — le pourquoi, pas seulement la règle
+      <textarea name="body" rows="3"
+                placeholder="Les tests passent ET la fonctionnalité est branchée dans l'application. Un module livré avec son seul test passe tous les garde-fous sans exister à l'écran."></textarea>
+    </label>
+    <button type="submit">Enregistrer</button>
+  </form>
+</details>
+
+<h2>Méthodologie <span class="count">{{ practices|length }}</span></h2>
+
+{% if not practices %}
+  <p class="muted">Rien encore. Une bonne première entrée : ce que « terminé »
+    veut dire sur ce projet — c'est la question qui coûte le plus cher quand elle
+    n'a pas de réponse écrite.</p>
+{% endif %}
+
+<ul class="rows">
+  {% for p in practices %}
+    <li class="row-card">
+      <div class="row-top">
+        <span class="tag">{{ p.category }}</span>
+        <strong>{{ p.title }}</strong>
+      </div>
+      {% if p.body %}<div class="muted small detail md">{{ p.body | markdown }}</div>{% endif %}
+      <div class="row-actions">
+        <form class="panel-form inline" method="post"
+              action="/p/{{ project.slug }}/method/{{ p.id }}/delete">
+          <input type="hidden" name="tab" value="method">
+          <button class="ghost small danger">Retirer</button>
+        </form>
+      </div>
+    </li>
+  {% endfor %}
+</ul>

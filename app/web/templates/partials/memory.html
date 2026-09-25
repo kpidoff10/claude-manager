@@ -1,0 +1,55 @@
+<details class="inline-form">
+  <summary class="btn">+ Nouvelle mémoire</summary>
+  <form class="panel-form grid-form" method="post" action="/p/{{ project.slug }}/memory/new">
+    <input name="title" placeholder="Titre — ex. « SQLite plutôt que Postgres »" required>
+    <textarea name="body" rows="3" placeholder="Le contenu, et surtout le pourquoi" required></textarea>
+    <select name="kind">
+      {% for k in memory_kinds %}<option value="{{ k }}">{{ k }}</option>{% endfor %}
+    </select>
+    <input name="tags" placeholder="tags">
+    <label class="check"><input type="checkbox" name="pinned" value="1"> épingler en tête du briefing</label>
+    <button type="submit">Enregistrer</button>
+  </form>
+</details>
+
+<ul class="memory-list">
+  {% for m in memories %}
+  <li class="memory kind-{{ m.kind }} {% if m.pinned %}pinned{% endif %}">
+    <div class="memory-head">
+      {% if m.pinned %}<span title="épinglée">📌</span>{% endif %}
+      <span class="tag kind-{{ m.kind }}">{{ m.kind }}</span>
+      <strong>{{ m.title }}</strong>
+      {% if not m.project_id %}<span class="tag">global</span>{% endif %}
+      {% for tag in m.tags %}<span class="tag">#{{ tag }}</span>{% endfor %}
+      <span class="muted small">{{ m.updated_at[:10] }}</span>
+    </div>
+    <div class="body-text">{{ m.body }}</div>
+    <details>
+      <summary class="btn ghost small">Modifier</summary>
+      <form class="panel-form grid-form" method="post"
+            action="/p/{{ project.slug }}/memory/{{ m.id }}/update">
+        <input name="title" value="{{ m.title }}">
+        <textarea name="body" rows="4">{{ m.body }}</textarea>
+        <select name="kind">
+          {% for k in memory_kinds %}
+            <option value="{{ k }}" {% if m.kind == k %}selected{% endif %}>{{ k }}</option>
+          {% endfor %}
+        </select>
+        <input name="tags" value="{{ m.tags|join(', ') }}" placeholder="tags">
+        <label class="check">
+          <input type="checkbox" name="pinned" value="1" {% if m.pinned %}checked{% endif %}> épinglée
+        </label>
+        <button type="submit">Enregistrer</button>
+      </form>
+      <form class="panel-form" method="post"
+            action="/p/{{ project.slug }}/memory/{{ m.id }}/delete"
+            data-confirm="Supprimer « {{ m.title }} » ?">
+        <button class="danger">Supprimer</button>
+      </form>
+    </details>
+  </li>
+  {% else %}
+  <li class="muted">Aucune mémoire. C'est ici qu'atterrissent les décisions
+    d'architecture, les conventions du projet et les pièges rencontrés.</li>
+  {% endfor %}
+</ul>

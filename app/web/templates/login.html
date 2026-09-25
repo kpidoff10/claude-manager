@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Connexion — claude-manager</title>
+  <link rel="stylesheet" href="/static/app.css?v={{ static_v }}">
+</head>
+<body class="centered">
+  <form class="card login" method="post" action="/login">
+    <h1>🧭 claude-manager</h1>
+    <p class="muted">L'état de tes projets, partagé avec Claude.</p>
+    <input type="hidden" name="next" value="{{ next }}">
+    <input type="password" name="password" placeholder="Mot de passe" autofocus required>
+    {% if error %}<p class="error">{{ error }}</p>{% endif %}
+    <button type="submit">Entrer</button>
+  </form>
+</body>
+</html>

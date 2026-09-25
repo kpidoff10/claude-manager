@@ -1,0 +1,258 @@
+{# Fiche projet — cinq sections, donc un sous-menu.
+
+   Tout tient par des ANCRES et des <details>, jamais par du JavaScript : la
+   règle du projet est que l'interface reste utilisable sans lui. Un menu qui
+   masquerait les sections par script laisserait une page vide au repli. #}
+
+{% set sections = [
+  ('doc', '📖', 'Doc', 'Documentation', docs|length),
+  ('cmd', '⌘', 'Cmd', 'Commandes', commands|length),
+  ('svc', '🌐', 'Services', 'Services', services|length),
+  ('env', '🔑', 'Vars', 'Variables', env_vars|length),
+  ('res', '🔗', 'Liens', 'Ressources', resources|length),
+] %}
+
+<nav class="fiche-menu" aria-label="Sections de la fiche">
+  {% for cle, icone, court, nom, compte in sections %}
+    <a class="fiche-pill" href="#{{ cle }}" title="{{ nom }}">
+      <span class="fiche-pill-ico">{{ icone }}</span>
+      <span class="fiche-pill-nom">{{ court }}</span>
+      <span class="fiche-pill-compte {{ 'vide' if not compte }}">{{ compte }}</span>
+    </a>
+  {% endfor %}
+</nav>
+
+<!-- ------------------------------------------------------------------ -->
+<section class="profile-block" id="doc">
+  <h2>Documentation <span class="count">{{ docs|length }}</span></h2>
+  <p class="muted small">
+    Un index, pas une copie : le contenu reste dans le dépôt, où il change dans
+    le même commit que le code qu'il décrit. Chaque ligne répond à une seule
+    question — <strong>quand faut-il ouvrir ce fichier ?</strong>
+  </p>
+  <form class="panel-form inline" method="post" action="/p/{{ project.slug }}/docs/scan">
+    <input type="hidden" name="tab" value="profile">
+    <button class="btn small">Détecter les fichiers du dépôt</button>
+  </form>
+
+  {# Groupés par répertoire : vingt-sept fichiers à plat ne se lisent pas. #}
+  {% set groupes = {} %}
+  {% for d in docs %}
+    {% set dossier = d.path.rsplit('/', 1)[0] if '/' in d.path else 'racine' %}
+    {% if groupes.update({dossier: groupes.get(dossier, []) + [d]}) %}{% endif %}
+  {% endfor %}
+
+  {% for dossier, fichiers in groupes.items() %}
+    <details class="fiche-groupe" {% if dossier == 'racine' or groupes|length < 3 %}open{% endif %}>
+      <summary>
+        <span class="mono">{{ dossier }}</span>
+        <span class="count">{{ fichiers|length }}</span>
+        {% set nus = fichiers | rejectattr('covers') | list %}
+        {% if nus %}<span class="tag req">{{ nus|length }} à documenter</span>{% endif %}
+      </summary>
+      <div class="fiche-grid">
+        {% for d in fichiers %}
+          <article class="fiche-carte {{ 'incomplete' if not d.covers }}">
+            <header>
+              <a class="doc-lien" href="/p/{{ project.slug }}/doc/{{ d.path }}">
+                <code>{{ d.path.rsplit('/', 1)[-1] }}</code></a>
+              <form class="panel-form" method="post"
+                    action="/p/{{ project.slug }}/docs/{{ d.id }}/delete"
+                    data-confirm="Retirer {{ d.path }} de l'index ?">
+                <input type="hidden" name="tab" value="profile">
+                <button class="danger small">✕</button>
+              </form>
+            </header>
+            {% if d.covers %}<p class="fiche-note">{{ d.covers }}</p>{% endif %}
+            <details class="fiche-edit">
+              <summary class="btn ghost small">{{ 'Modifier' if d.covers else 'Documenter' }}</summary>
+              <form class="panel-form" method="post" action="/p/{{ project.slug }}/docs/set">
+                <input type="hidden" name="tab" value="profile">
+                <input type="hidden" name="path" value="{{ d.path }}">
+                <input name="covers" value="{{ d.covers or '' }}"
+                       placeholder="quand faut-il ouvrir ce fichier ?">
+                <button class="small" type="submit">Enregistrer</button>
+              </form>
+            </details>
+          </article>
+        {% endfor %}
+      </div>
+    </details>
+  {% else %}
+    <p class="muted small">Aucun fichier repéré. Le bouton ci-dessus parcourt le
+      dépôt et inscrit les markdown qu'il y trouve.</p>
+  {% endfor %}
+</section>
+
+<!-- ------------------------------------------------------------------ -->
+<section class="profile-block" id="cmd">
+  <h2>Commandes <span class="count">{{ commands|length }}</span></h2>
+  <div class="fiche-grid">
+    {% for c in commands %}
+      <article class="fiche-carte">
+        <header>
+          <strong>{{ c.name }}</strong>
+          <form class="panel-form" method="post"
+                action="/p/{{ project.slug }}/profile/command/{{ c.id }}/delete"
+                data-confirm="Supprimer la commande « {{ c.name }} » ?">
+            <button class="danger small">✕</button>
+          </form>
+        </header>
+        <pre class="fiche-code">{{ c.command }}</pre>
+        {% if c.workdir %}<div class="fiche-meta">dans <code>{{ c.workdir }}</code></div>{% endif %}
+        {% if c.description %}<p class="fiche-note">{{ c.description }}</p>{% endif %}
+      </article>
+    {% else %}
+      <p class="muted small">Aucune commande. La détection de stack en trouve
+        souvent depuis les scripts npm.</p>
+    {% endfor %}
+  </div>
+  <details class="inline-form">
+    <summary class="btn ghost">+ Ajouter une commande</summary>
+    <form class="panel-form grid-form" method="post" action="/p/{{ project.slug }}/profile/command">
+      <label>Nom <input name="name" placeholder="dev / test / deploy" required></label>
+      <label>Commande <input name="command" placeholder="npm run dev" required></label>
+      <label>Répertoire <input name="workdir"></label>
+      <label class="wide">Description <input name="description"></label>
+      <button type="submit">Ajouter</button>
+    </form>
+  </details>
+</section>
+
+<!-- ------------------------------------------------------------------ -->
+<section class="profile-block" id="svc">
+  <h2>Services &amp; URLs <span class="count">{{ services|length }}</span></h2>
+  <div class="fiche-grid">
+    {% for s in services %}
+      <article class="fiche-carte">
+        <header>
+          <strong>{{ s.name }}</strong>
+          <span class="tag status-{{ 'active' if s.environment == 'prod' else 'paused' }}">
+            {{ s.environment }}</span>
+          <form class="panel-form" method="post"
+                action="/p/{{ project.slug }}/profile/service/{{ s.id }}/delete"
+                data-confirm="Supprimer le service « {{ s.name }} » ?">
+            <button class="danger small">✕</button>
+          </form>
+        </header>
+        {# L'URL est ce qu'on vient chercher : elle se voit, et elle se clique. #}
+        {% if s.url %}
+          <a class="fiche-lien" href="{{ s.url }}" target="_blank" rel="noopener">{{ s.url }}</a>
+        {% endif %}
+        <div class="fiche-meta">
+          {% if s.port %}<span>port <code>{{ s.port }}</code></span>{% endif %}
+          {% if s.container %}<span>conteneur <code>{{ s.container }}</code></span>{% endif %}
+        </div>
+        {% if s.notes %}<p class="fiche-note">{{ s.notes }}</p>{% endif %}
+      </article>
+    {% else %}
+      <p class="muted small">Aucun service enregistré.</p>
+    {% endfor %}
+  </div>
+  <details class="inline-form">
+    <summary class="btn ghost">+ Ajouter un service</summary>
+    <form class="panel-form grid-form" method="post" action="/p/{{ project.slug }}/profile/service">
+      <label>Nom <input name="name" required></label>
+      <label>Type
+        <select name="kind">
+          {% for k in ['url', 'api', 'db', 'container', 'other'] %}
+            <option value="{{ k }}">{{ k }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Environnement
+        <select name="environment">
+          {% for e in ['prod', 'staging', 'dev'] %}<option value="{{ e }}">{{ e }}</option>{% endfor %}
+        </select>
+      </label>
+      <label class="wide">URL <input name="url" placeholder="https://…"></label>
+      <label>Port <input name="port" type="number"></label>
+      <label>Conteneur <input name="container"></label>
+      <label class="wide">Notes <input name="notes"></label>
+      <button type="submit">Ajouter</button>
+    </form>
+  </details>
+</section>
+
+<!-- ------------------------------------------------------------------ -->
+<section class="profile-block" id="env">
+  <h2>Variables d'environnement <span class="count">{{ env_vars|length }}</span></h2>
+  <p class="muted small">Noms uniquement — aucune valeur secrète n'est stockée ici.</p>
+  <div class="fiche-grid">
+    {% for v in env_vars %}
+      <article class="fiche-carte {{ 'incomplete' if not v.description }}">
+        <header>
+          <code class="fiche-var">{{ v.name }}</code>
+          {% if v.secret %}<span class="tag secret">secrète</span>{% endif %}
+          {% if not v.required %}<span class="tag">optionnelle</span>{% endif %}
+          <form class="panel-form" method="post"
+                action="/p/{{ project.slug }}/profile/env_var/{{ v.id }}/delete"
+                data-confirm="Supprimer {{ v.name }} ?">
+            <button class="danger small">✕</button>
+          </form>
+        </header>
+        {% if v.description %}<p class="fiche-note">{{ v.description }}</p>
+        {% else %}<p class="fiche-note muted">— à quoi elle sert n'est pas écrit</p>{% endif %}
+        <div class="fiche-meta">
+          {% if v.location %}<span>dans <code>{{ v.location }}</code></span>{% endif %}
+          {% if v.example %}<span>format <code>{{ v.example }}</code></span>{% endif %}
+        </div>
+      </article>
+    {% else %}
+      <p class="muted small">Aucune variable déclarée.</p>
+    {% endfor %}
+  </div>
+  <details class="inline-form">
+    <summary class="btn ghost">+ Ajouter une variable</summary>
+    <form class="panel-form grid-form" method="post" action="/p/{{ project.slug }}/profile/env_var">
+      <label>Nom <input name="name" placeholder="NOM_DE_LA_VARIABLE" required></label>
+      <label>Définie dans <input name="location" placeholder=".env, compose…"></label>
+      <label class="wide">À quoi elle sert <input name="description"></label>
+      <label>Exemple de format <input name="example" placeholder="jamais la vraie valeur"></label>
+      <label class="check"><input type="checkbox" name="required" value="1" checked> requise</label>
+      <label class="check"><input type="checkbox" name="secret" value="1"> secrète</label>
+      <button type="submit">Ajouter</button>
+    </form>
+  </details>
+</section>
+
+<!-- ------------------------------------------------------------------ -->
+<section class="profile-block" id="res">
+  <h2>Ressources <span class="count">{{ resources|length }}</span></h2>
+  <div class="fiche-grid">
+    {% for r in resources %}
+      <article class="fiche-carte">
+        <header>
+          <span class="tag">{{ r.kind }}</span>
+          <strong>{{ r.title }}</strong>
+          {% if not r.project_id %}<span class="tag">global</span>{% endif %}
+          <form class="panel-form" method="post"
+                action="/p/{{ project.slug }}/profile/resource/{{ r.id }}/delete"
+                data-confirm="Supprimer « {{ r.title }} » ?">
+            <button class="danger small">✕</button>
+          </form>
+        </header>
+        <a class="fiche-lien" href="{{ r.url }}" target="_blank" rel="noopener">{{ r.url }}</a>
+        {% if r.notes %}<p class="fiche-note">{{ r.notes }}</p>{% endif %}
+      </article>
+    {% else %}
+      <p class="muted small">Aucune ressource. Ajoute la doc, le dépôt, les maquettes…</p>
+    {% endfor %}
+  </div>
+  <details class="inline-form">
+    <summary class="btn ghost">+ Ajouter une ressource</summary>
+    <form class="panel-form grid-form" method="post" action="/p/{{ project.slug }}/profile/resource">
+      <label>Titre <input name="title" required></label>
+      <label>Type
+        <select name="kind">
+          {% for k in ['docs', 'repo', 'ticket', 'design', 'dashboard', 'other'] %}
+            <option value="{{ k }}">{{ k }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label class="wide">URL <input name="url" placeholder="https://…" required></label>
+      <label class="wide">Notes <input name="notes"></label>
+      <button type="submit">Ajouter</button>
+    </form>
+  </details>
+</section>

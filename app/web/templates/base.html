@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0f1115">
+  <title>{% block title %}claude-manager{% endblock %}</title>
+  <link rel="stylesheet" href="/static/app.css?v={{ static_v }}">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='14' font-size='14'>🧭</text></svg>">
+</head>
+<body>
+<div class="overlay" data-close-drawer></div>
+
+<aside class="sidebar" id="drawer">
+  <div class="sidebar-head">
+    <a class="brand" href="/">🧭 claude-manager</a>
+    <button class="icon-btn drawer-only" data-close-drawer aria-label="Fermer le menu">✕</button>
+  </div>
+
+  <nav class="nav-group">
+    <a class="nav-item {% if page == 'dashboard' %}active{% endif %}" href="/">
+      <span class="ico">▦</span> Tableau de bord
+    </a>
+    <a class="nav-item {% if page == 'search' %}active{% endif %}" href="/search">
+      <span class="ico">⌕</span> Recherche
+    </a>
+    <a class="nav-item {% if page == 'preferences' %}active{% endif %}" href="/preferences">
+      <span class="ico">★</span> Préférences techniques
+    </a>
+    <a class="nav-item {% if page == 'reglages' %}active{% endif %}" href="/reglages">
+      <span class="ico">🔔</span> Notifications
+    </a>
+  </nav>
+
+  <div class="nav-group projects">
+    <div class="nav-title">Projets</div>
+    {% for p in projects|default([]) %}
+      {# On n'affiche plus un décompte de tâches : ce qui se décide d'un coup
+         d'œil, c'est qui travaille et ce qui attend une décision. #}
+      <a class="nav-item project-link {% if project and p.slug == project.slug %}active{% endif %}"
+         href="/p/{{ p.slug }}/tasks{% if p.tasks_awaiting %}?view=kanban{% endif %}">
+        <span class="dot status-{{ p.status }}"></span>
+        <span class="project-name">{{ p.name }}</span>
+        {% if p.agent_running %}
+          <span class="sig working" title="Un agent travaille sur ce projet">
+            <span class="pulse"></span>agent
+          </span>
+        {% elif p.active_recently %}
+          <span class="sig recent" title="Écriture sur ce projet il y a moins de 15 minutes">
+            actif
+          </span>
+        {% endif %}
+        {% if p.tasks_awaiting %}
+          <span class="sig awaiting" title="À vérifier ou en attente de ta décision">
+            {{ p.tasks_awaiting }} à voir
+          </span>
+        {% endif %}
+      </a>
+    {% else %}
+      <span class="nav-empty muted">Aucun projet</span>
+    {% endfor %}
+  </div>
+
+  <nav class="nav-group bottom">
+    <a class="nav-item" href="/logout"><span class="ico">⏻</span> Déconnexion</a>
+  </nav>
+</aside>
+
+<div class="main">
+  <header class="topbar">
+    <button class="icon-btn menu-toggle" data-open-drawer aria-label="Ouvrir le menu"
+            aria-controls="drawer" aria-expanded="false">☰</button>
+
+    <nav class="crumbs" aria-label="Fil d'Ariane">
+      <a href="/">Accueil</a>
+      {% if project %}
+        <span class="sep">/</span>
+        <a href="/p/{{ project.slug }}/tasks">{{ project.name }}</a>
+        {% if tab %}
+          <span class="sep">/</span>
+          <span class="current">{{ tab_label|default(tab) }}</span>
+        {% endif %}
+      {% elif page and page != 'dashboard' %}
+        <span class="sep">/</span>
+        <span class="current">{{ page_label|default(page) }}</span>
+      {% endif %}
+    </nav>
+
+    <form class="topbar-search" action="/search" method="get" role="search">
+      <input type="search" name="q" placeholder="Rechercher…" value="{{ q|default('') }}"
+             aria-label="Rechercher">
+    </form>
+    <a class="icon-btn search-link" href="/search" aria-label="Recherche">⌕</a>
+  </header>
+
+  <main class="content">
+    {% block content %}{% endblock %}
+  </main>
+</div>
+
+<script src="/static/app.js?v={{ static_v }}"></script>
+</body>
+</html>

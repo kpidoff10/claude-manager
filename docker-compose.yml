@@ -1,0 +1,22 @@
+services:
+  claude-manager:
+    build: .
+    container_name: claude-manager
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      CM_DATA_DIR: /data
+    volumes:
+      - ./data:/data
+      # Monté au même chemin que sur l'hôte, pour que les chemins enregistrés
+      # en base soient valides des deux côtés (scan de la stack).
+      - ${CM_PROJECTS_ROOT:-/home/dev/projects}:${CM_PROJECTS_ROOT:-/home/dev/projects}:ro
+    ports:
+      # Accès local direct, utilisé par le hook SessionStart de Claude Code.
+      - "127.0.0.1:8099:8000"
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.claude-manager.rule=Host(`${CM_DOMAIN:?définir CM_DOMAIN dans .env}`)
+      - traefik.http.routers.claude-manager.entrypoints=websecure
+      - traefik.http.routers.claude-manager.tls.certresolver=letsencrypt
+      - traefik.http.services.claude-manager.loadbalancer.server.port=8000

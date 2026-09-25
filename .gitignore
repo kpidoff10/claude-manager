@@ -1,0 +1,14 @@
+.env
+data/
+__pycache__/
+*.pyc
+*.db
+*.db-wal
+*.db-shm
+logs/
+
+# Amorçage de mes propres projets : local uniquement.
+scripts/seed.py
+scripts/seed_mare.py
+scripts/backfill.py
+.env.bak*

@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% block title %}Agent · tâche #{{ run.task_id }} — claude-manager{% endblock %}
+{% block content %}
+{% set labels = {'passed': 'terminé, tests verts', 'failed': 'tests en échec',
+                 'running': 'en cours', 'error': 'arrêt anormal', 'stopped': 'interrompu'} %}
+
+<header class="page-head run-head">
+  <div class="head-main">
+    <h1>{{ run.task_title }}</h1>
+    <p class="muted small">
+      <a href="/p/{{ run.project_slug }}/tasks?view=kanban">{{ run.project_name }}</a>
+      · tâche <strong>#{{ run.task_id }}</strong>
+      {% if run.attempt > 1 %} · passage n° {{ run.attempt }}{% endif %}
+    </p>
+  </div>
+  <div class="head-stats">
+    <span class="run-state s-{{ run.status }}">
+      {% if live %}<span class="pulse"></span>{% endif %}
+      {{ labels.get(run.status, run.status) }}
+    </span>
+  </div>
+</header>
+
+<div class="run-facts">
+  {% if meta.duration_ms %}<span>⏱ {{ (meta.duration_ms // 1000) // 60 }} min {{ (meta.duration_ms // 1000) % 60 }} s</span>
+  {% elif live %}<span>⏱ en cours depuis {{ run.started_at[11:16] }}</span>{% endif %}
+  {% if meta.turns %}<span>{{ meta.turns }} tours</span>{% endif %}
+  {% if counts.read %}<span class="c-read">{{ counts.read }} lecture(s)</span>{% endif %}
+  {% if counts.write %}<span class="c-write">{{ counts.write }} écriture(s)</span>{% endif %}
+  {% if counts.shell %}<span class="c-shell">{{ counts.shell }} commande(s)</span>{% endif %}
+  {% if counts.mcp %}<span class="c-mcp">{{ counts.mcp }} appel(s) au manager</span>{% endif %}
+  {% if run.commit_after %}<span class="mono">commit {{ run.commit_after[:8] }}</span>{% endif %}
+  <a class="btn ghost small" href="/runs/{{ run.id }}/log">texte brut</a>
+</div>
+
+{% if run.worktree or run.branch %}
+{# Où l'agent travaille réellement : sans cette ligne, on cherche en vain des
+   modifications dans la copie principale, qui n'en verra jamais. #}
+<div class="run-where">
+  <span>L'agent travaille dans sa propre copie, pas dans la tienne :</span>
+  {% if run.worktree %}<code>{{ run.worktree }}</code>{% endif %}
+  {% if run.branch %}<span class="mono">⑂ {{ run.branch }}</span>{% endif %}
+  {% if run.preview_url %}
+    <a class="preview-link" href="{{ run.preview_url }}" target="_blank" rel="noopener">
+      ▶ Essayer cette version</a>
+  {% endif %}
+</div>
+{% endif %}
+
+{% if run.tests_command %}
+<div class="run-tests {{ 'ok' if run.tests_ok else 'ko' }}">
+  <strong>{{ '✅ Tests verts' if run.tests_ok else '❌ Tests en échec' }}</strong>
+  <code>{{ run.tests_command }}</code>
+  {% if run.tests_output %}
+  <details>
+    <summary class="btn ghost small">Voir la sortie</summary>
+    <pre class="output">{{ run.tests_output }}</pre>
+  </details>
+  {% endif %}
+</div>
+{% endif %}
+
+{% if run.diff_stat %}
+<details class="run-diff">
+  <summary class="btn ghost small">Fichiers touchés</summary>
+  <pre class="output">{{ run.diff_stat }}</pre>
+</details>
+{% endif %}
+
+{% if orphans %}
+{# Un module livré avec son test passe tous les garde-fous sans jamais être
+   branché : les tests sont verts, le lint aussi, et la fonctionnalité n'existe
+   pas. Le signaler ici, au moment où l'on décide. #}
+<div class="orphans">
+  <strong>⚠ {{ orphans|length }} fichier(s) ajouté(s) que rien d'autre ne mentionne</strong>
+  <span class="muted">— vérifier qu'ils sont bien branchés dans l'application, et pas
+    seulement couverts par leurs propres tests.</span>
+  <ul>{% for f in orphans %}<li class="mono">{{ f }}</li>{% endfor %}</ul>
+</div>
+{% endif %}
+
+{% if patch %}
+<section class="patch">
+  <h2>Le code — {{ patch|length }} fichier(s)
+    {% if patch_truncated %}<span class="tag req">diff tronqué</span>{% endif %}
+  </h2>
+  {% for f in patch %}
+    <details class="patch-file" {% if f.lines|length < 120 %}open{% endif %}>
+      <summary>
+        <span class="mono">{{ f.name }}</span>
+        <span class="patch-counts"><span class="plus">+{{ f.added }}</span>
+          <span class="minus">−{{ f.removed }}</span></span>
+      </summary>
+      <pre class="patch-body">{% for l in f.lines %}<span class="l-{{ l.kind }}">{{ l.text }}</span>
+{% endfor %}</pre>
+    </details>
+  {% endfor %}
+</section>
+{% endif %}
+
+<div id="panel" {% if live %}data-run-live="{{ run.id }}"{% endif %}>
+  {% include "partials/run_steps.html" %}
+</div>
+{% endblock %}

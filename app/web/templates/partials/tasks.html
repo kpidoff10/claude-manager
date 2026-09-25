@@ -1,0 +1,398 @@
+{% import "partials/_task_forms.html" as tf %}
+
+{# La checklist d'une tâche : ses sous-tâches, cochables d'un clic. Cocher
+   passe la sous-tâche en `done`, décocher la remet en `todo`. Chaque case est
+   un formulaire POST : le repli sans JavaScript tient. #}
+{% macro checklist(t, subs) %}
+<div class="checklist">
+  {% if subs %}
+  <ul>
+    {% for s in subs %}
+    {% set closed = s.status in ('done', 'cancelled') %}
+    <li class="check-item {{ 'closed' if closed }} status-{{ s.status }}">
+      <form class="panel-form inline" method="post"
+            action="/p/{{ project.slug }}/tasks/{{ s.id }}/update">
+        <input type="hidden" name="tab" value="tasks">
+        <input type="hidden" name="view" value="{{ view }}">
+        <input type="hidden" name="status" value="{{ 'todo' if closed else 'done' }}">
+        <button type="submit" class="check-box" aria-label="{{ 'Décocher' if closed else 'Cocher' }}"
+                title="{{ 'Remettre à faire' if closed else 'Marquer comme fait' }}">{{ '☑' if closed else '☐' }}</button>
+      </form>
+      <span class="check-title">{{ s.title }}</span>
+      {% if s.status == 'cancelled' and s.cancel_reason %}<span class="check-reason">{{ s.cancel_reason }}</span>{% endif %}
+      {% if s.status not in ('todo', 'done') %}<span class="tag status-{{ s.status }}">{{ s.status }}</span>{% endif %}
+      <span class="muted small">#{{ s.id }}</span>
+      <form class="panel-form inline" method="post"
+            action="/p/{{ project.slug }}/tasks/{{ s.id }}/delete"
+            data-confirm="Supprimer « {{ s.title }} » ?">
+        <input type="hidden" name="tab" value="tasks">
+        <input type="hidden" name="view" value="{{ view }}">
+        <button type="submit" class="check-remove" aria-label="Supprimer" title="Supprimer">×</button>
+      </form>
+    </li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+  <form class="panel-form check-add" method="post" action="/p/{{ project.slug }}/tasks/new">
+    <input type="hidden" name="tab" value="tasks">
+    <input type="hidden" name="view" value="{{ view }}">
+    <input type="hidden" name="parent_id" value="{{ t.id }}">
+    <input type="hidden" name="owner" value="{{ t.owner }}">
+    <input type="hidden" name="priority" value="{{ t.priority }}">
+    {% if t.milestone_id %}<input type="hidden" name="milestone_id" value="{{ t.milestone_id }}">{% endif %}
+    <input name="title" placeholder="+ Ajouter une sous-tâche" aria-label="Nouvelle sous-tâche" required>
+  </form>
+</div>
+{% endmacro %}
+
+{% macro task_row(t) %}
+<li class="task status-{{ t.status }} p{{ t.priority }}" draggable="true"
+    data-id="{{ t.id }}" data-tags="{{ t.tags|join(' ') }}">
+  <span class="handle" title="Glisser pour réordonner">⠿</span>
+  {{ tf.selects(project, t, statuses, priorities, 'tasks', 'liste') }}
+  {% set subs = subtasks.get(t.id, []) %}
+  <details class="task-body">
+    <summary>
+      <span class="task-title">{{ t.title }}</span>
+      {{ tf.badges(t, subs) }}
+    </summary>
+    {% if t.body %}<div class="md task-md">{{ t.body|markdown_taches(project.slug, t.id, view) }}</div>{% endif %}
+    {{ checklist(t, subs) }}
+    <form class="panel-form grid-form" method="post"
+          action="/p/{{ project.slug }}/tasks/{{ t.id }}/update">
+      <input type="hidden" name="tab" value="tasks">
+      <input type="hidden" name="view" value="{{ view }}">
+      <label class="wide">Titre <input name="title" value="{{ t.title }}"></label>
+      <label class="wide">Détail <textarea name="body" rows="3">{{ t.body or '' }}</textarea></label>
+      <label>Tags <input name="tags" value="{{ t.tags|join(', ') }}"></label>
+      <label>Raison du blocage <input name="blocked_reason" value="{{ t.blocked_reason or '' }}"></label>
+      {% if t.status == 'cancelled' %}
+      <label>Raison de l'abandon <input name="cancel_reason" value="{{ t.cancel_reason or '' }}"></label>
+      {% endif %}
+      <label>Pour qui
+        <select name="owner">
+          {% for o in ['claude', 'user'] %}
+            <option value="{{ o }}" {% if t.owner == o %}selected{% endif %}>{{ o }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Jalon
+        <select name="milestone_id">
+          <option value="">— sans jalon —</option>
+          {% for m in milestones %}
+            <option value="{{ m.id }}" {% if t.milestone_id == m.id %}selected{% endif %}>{{ m.name }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <button type="submit">Enregistrer</button>
+    </form>
+    <form class="panel-form" method="post"
+          action="/p/{{ project.slug }}/tasks/{{ t.id }}/delete"
+          data-confirm="Supprimer la tâche « {{ t.title }} » ?">
+      <input type="hidden" name="tab" value="tasks">
+      <input type="hidden" name="view" value="{{ view }}">
+      <button type="submit" class="danger small">Supprimer</button>
+    </form>
+  </details>
+</li>
+{% endmacro %}
+
+<div class="view-switch">
+  <a class="btn small {% if view != 'kanban' %}active{% endif %}"
+     href="/p/{{ project.slug }}/tasks">☰ Liste</a>
+  <a class="btn small {% if view == 'kanban' %}active{% endif %}"
+     href="/p/{{ project.slug }}/tasks?view=kanban">▦ Kanban</a>
+  <span class="muted small">
+    {% if view == 'kanban' %}Glisser une carte d'une colonne à l'autre change son statut.
+    {% else %}Glisser une ligne réordonne les priorités.{% endif %}
+  </span>
+</div>
+
+{% if tags %}
+{# Au-delà d'une dizaine, la barre de tags occupe plus de place que les tâches
+   qu'elle sert à filtrer. Le reste se déplie par une case à cocher masquée :
+   pas de JavaScript, donc le repli tient même quand le script ne charge pas. #}
+<div class="tag-filter" data-tag-filter>
+  <button type="button" class="tag-chip active" data-tag="">tout</button>
+  {% for t in tags[:10] %}
+    <button type="button" class="tag-chip" data-tag="{{ t.tag }}"
+            title="{{ t.open }} ouverte(s) sur {{ t.total }}">#{{ t.tag }}
+      <span class="tag-count">{{ t.open or t.total }}</span>
+    </button>
+  {% endfor %}
+  {% if tags|length > 10 %}
+    <input type="checkbox" id="tags-suite-{{ view }}" class="tag-plus-toggle">
+    {% for t in tags[10:] %}
+      <button type="button" class="tag-chip tag-extra" data-tag="{{ t.tag }}"
+              title="{{ t.open }} ouverte(s) sur {{ t.total }}">#{{ t.tag }}
+        <span class="tag-count">{{ t.open or t.total }}</span>
+      </button>
+    {% endfor %}
+    <label for="tags-suite-{{ view }}" class="tag-chip tag-plus"
+           data-plus="+{{ tags|length - 10 }}" data-moins="− replier"></label>
+  {% endif %}
+</div>
+{% endif %}
+
+<details class="inline-form">
+  <summary class="btn">+ Nouvelle tâche</summary>
+  <form class="panel-form grid-form" method="post" action="/p/{{ project.slug }}/tasks/new">
+    <input type="hidden" name="tab" value="tasks">
+    <input type="hidden" name="view" value="{{ view }}">
+    <label class="wide">Que faut-il faire ? <input name="title" required></label>
+    <label class="wide">Détail <textarea name="body" rows="2"></textarea></label>
+    <label>Priorité
+      <select name="priority">
+        {% for value, label in priorities.items()|sort(reverse=true) %}
+          <option value="{{ value }}" {% if value == 2 %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Pour qui
+      <select name="owner">
+        <option value="claude">Claude</option>
+        <option value="user">moi</option>
+      </select>
+    </label>
+    <label>Jalon
+      <select name="milestone_id">
+        <option value="">— sans jalon —</option>
+        {% for m in milestones %}<option value="{{ m.id }}">{{ m.name }}</option>{% endfor %}
+      </select>
+    </label>
+    <label>Tags <input name="tags"></label>
+    <button type="submit">Ajouter</button>
+  </form>
+</details>
+
+{% if view == 'kanban' %}
+{# La barre ne s'affiche que si elle a quelque chose à dire : un agent qui
+   tourne, une file en pause, un blocage, ou des tâches qui attendent. Sans
+   cela, elle ne ferait qu'annoncer qu'il n'y a rien à annoncer. #}
+{% set queued_here = columns.get('queued', [])|length %}
+{% if queue.running_all or queue.paused or queue_blocker or queued_here %}
+  <div class="queue-bar">
+    {% if queue.running_all %}
+      <span class="qdot running"></span>
+      <span>{{ queue.running_all|length }} agent(s) en cours sur {{ queue.max_parallel }} :</span>
+      {% for r in queue.running_all %}
+        <a class="btn ghost small" href="/runs/{{ r.id }}"
+           title="{{ r.title }}">#{{ r.task_id }}
+          {% if r.project_slug != project.slug %}· {{ r.project_slug }}{% endif %}
+          {% if r.group_id %}· lot {{ r.group_id }}{% endif %}
+        </a>
+      {% endfor %}
+      <form class="panel-form inline" method="post" action="/queue/stop">
+        <input type="hidden" name="slug" value="{{ project.slug }}">
+        <input type="hidden" name="tab" value="tasks"><input type="hidden" name="view" value="kanban">
+        <button class="danger small">■ Arrêter</button>
+      </form>
+    {% elif queue.paused %}
+      <span class="qdot paused"></span><span>File en pause</span>
+      <form class="panel-form inline" method="post" action="/queue/resume">
+        <input type="hidden" name="slug" value="{{ project.slug }}">
+        <input type="hidden" name="tab" value="tasks"><input type="hidden" name="view" value="kanban">
+        <button class="small">▶ Reprendre</button>
+      </form>
+    {% elif queue_blocker %}
+      <span class="qdot blocked-q"></span>
+      <span><strong>La file ne peut pas démarrer</strong> — {{ queue_blocker }}</span>
+      {% if 'non propre' in queue_blocker %}
+        <form class="panel-form inline" method="post"
+              action="/p/{{ project.slug }}/queue-commit">
+          <input type="hidden" name="tab" value="tasks"><input type="hidden" name="view" value="kanban">
+          <button class="small">⎇ Faire commiter par un agent</button>
+        </form>
+      {% endif %}
+    {% else %}
+      <span class="qdot idle"></span>
+      <span>{{ queued_here }} tâche(s) en attente — l'agent démarre dans quelques secondes</span>
+      <form class="panel-form inline" method="post" action="/queue/pause">
+        <input type="hidden" name="slug" value="{{ project.slug }}">
+        <input type="hidden" name="tab" value="tasks"><input type="hidden" name="view" value="kanban">
+        <button class="ghost small">⏸ Mettre en pause</button>
+      </form>
+    {% endif %}
+  </div>
+{% endif %}
+
+  {% if awaiting %}
+  <div class="awaiting-strip">
+    <strong>Ce qui t'attend ({{ awaiting|length }})</strong>
+    {% for t in awaiting %}
+      <span class="tag {{ 'req' if t.status == 'review' else 'blocked' }}">
+        #{{ t.id }} {{ t.title[:44] }}{% if t.title|length > 44 %}…{% endif %}
+      </span>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <div class="kanban" data-slug="{{ project.slug }}">
+    {% for key, label in kanban_columns %}
+      {% set cards = columns.get(key, []) %}
+      <section class="kcol status-{{ key }}">
+        <header class="kcol-head">{{ label }} <span class="count">{{ cards|length }}</span></header>
+        {% if key == 'queued' and queue_blocker %}
+          <div class="kcol-warning">
+            ⏸ {{ queue_blocker }}
+            {% if 'non propre' in queue_blocker %}
+              <form class="panel-form" method="post"
+                    action="/p/{{ project.slug }}/queue-commit">
+                <input type="hidden" name="tab" value="tasks"><input type="hidden" name="view" value="kanban">
+                <button class="small">⎇ Faire commiter par un agent</button>
+              </form>
+            {% endif %}
+          </div>
+        {% endif %}
+        <ul class="kcards" data-status="{{ key }}" data-slug="{{ project.slug }}">
+          {% for t in cards %}
+          {% set run = runs.get(t.id) %}
+          <li class="kcard p{{ t.priority }} {{ 'is-' + t.status }}" draggable="true"
+              data-id="{{ t.id }}" data-tags="{{ t.tags|join(' ') }}">
+            <div class="kcard-title">{{ t.title }}</div>
+            {{ tf.badges(t, subtasks.get(t.id)) }}
+
+            {% if run %}
+              <a class="btn ghost small kcard-log {{ 'live' if run.status == 'running' }}"
+                 href="/runs/{{ run.id }}">
+                {% if run.status == 'running' %}<span class="pulse"></span>{% else %}⧉ {% endif %}journal{% if run.attempt > 1 %} ({{ run.attempt }}ᵉ){% endif %}
+              </a>
+            {% endif %}
+
+            {% if t.status == 'blocked' %}<span class="tag blocked">bloqué</span>{% endif %}
+            {% if t.blocked_reason and t.status in ('needs_input', 'blocked') %}
+              <div class="kcard-note">{{ t.blocked_reason }}</div>
+            {% endif %}
+
+            {% if t.status == 'needs_input' %}
+              {% set q = questions.get(t.id) %}
+              <div class="answer-box">
+                {% if q and q.recommendation %}
+                  <div class="reco">Avis de l'agent : {{ q.recommendation }}</div>
+                {% endif %}
+                {% if q and q.options %}
+                  {% for opt in q.options %}
+                    <form class="panel-form" method="post"
+                          action="/p/{{ project.slug }}/tasks/{{ t.id }}/answer">
+                      <input type="hidden" name="tab" value="tasks">
+                      <input type="hidden" name="view" value="kanban">
+                      <input type="hidden" name="choice" value="{{ opt }}">
+                      <button class="option-btn">{{ opt }}</button>
+                    </form>
+                  {% endfor %}
+                {% endif %}
+                <details {% if not (q and q.options) %}open{% endif %}>
+                  <summary class="btn ghost small">
+                    {% if q and q.options %}✎ Répondre autrement{% else %}✎ Débloquer{% endif %}
+                  </summary>
+                  <form class="panel-form grid-form" method="post"
+                        action="/p/{{ project.slug }}/tasks/{{ t.id }}/answer">
+                    <input type="hidden" name="tab" value="tasks">
+                    <input type="hidden" name="view" value="kanban">
+                    <label class="wide">
+                      {% if q and q.options %}Ta réponse{% else %}Ta consigne{% endif %} —
+                      elle est ajoutée à l'énoncé et la tâche repart en file
+                      <textarea name="comment" rows="3" required></textarea>
+                    </label>
+                    <button type="submit">
+                      {% if q and q.options %}Répondre{% else %}Remettre en file{% endif %}
+                    </button>
+                  </form>
+                </details>
+              </div>
+            {% endif %}
+
+            {% if run and t.status == 'review' %}
+              <div class="kcard-run {{ 'ko' if run.tests_ok == 0 else 'ok' if run.tests_ok == 1 else '' }}">
+                {% if run.tests_ok == 1 %}✅ tests verts
+                {% elif run.tests_ok == 0 %}❌ tests en échec — rien n'a été commité
+                {% else %}⚪ pas de tests enregistrés{% endif %}
+                {% if run.summary %}<div class="muted">{{ run.summary }}</div>{% endif %}
+                {% if run.diff_stat %}<pre class="diff">{{ run.diff_stat[-400:] }}</pre>{% endif %}
+                {% if run.commit_after %}<div class="mono muted">commit {{ run.commit_after[:8] }}</div>{% endif %}
+                {% if run.collision %}
+                  <div class="kcard-collision">⚠ collision avec une autre tâche du même lot :
+                    {{ run.collision.split('\n')|length }} fichier(s) — rien n'a été commité</div>
+                {% endif %}
+                {% if run.foreign_files %}
+                  <div class="muted">{{ run.foreign_files.split('\n')|length }} fichier(s)
+                    modifié(s) hors de cet agent, laissés en l'état</div>
+                {% endif %}
+              </div>
+              {% if run.preview_url %}
+                <a class="preview-link" href="{{ run.preview_url }}" target="_blank"
+                   rel="noopener">▶ Essayer cette version</a>
+              {% endif %}
+              {% if run.branch %}
+                <div class="kcard-branch mono">⑂ {{ run.branch }}
+                  {% if run.base_branch %}<span class="muted">→ {{ run.base_branch }}</span>{% endif %}
+                  {% if run.merge_state %}<span class="tag merge-{{ run.merge_state }}">{{ run.merge_state }}</span>{% endif %}
+                </div>
+              {% endif %}
+              <div class="kcard-actions">
+                {% if run.branch and run.merge_state != 'merged' %}
+                  <form class="panel-form inline" method="post"
+                        action="/p/{{ project.slug }}/tasks/{{ t.id }}/validate">
+                    <input type="hidden" name="tab" value="tasks"><input type="hidden" name="view" value="kanban">
+                    <input type="hidden" name="merge" value="1">
+                    <button class="small ok-btn">✓ Valider et fusionner</button>
+                  </form>
+                  <form class="panel-form inline" method="post"
+                        action="/p/{{ project.slug }}/tasks/{{ t.id }}/validate">
+                    <input type="hidden" name="tab" value="tasks"><input type="hidden" name="view" value="kanban">
+                    <button class="ghost small">✓ Valider sans fusionner</button>
+                  </form>
+                {% else %}
+                  <form class="panel-form inline" method="post"
+                        action="/p/{{ project.slug }}/tasks/{{ t.id }}/validate">
+                    <input type="hidden" name="tab" value="tasks"><input type="hidden" name="view" value="kanban">
+                    <button class="small ok-btn">✓ Valider</button>
+                  </form>
+                {% endif %}
+                <details class="reject">
+                  <summary class="btn ghost small">↩ Commenter</summary>
+                  <form class="panel-form grid-form" method="post"
+                        action="/p/{{ project.slug }}/tasks/{{ t.id }}/reject">
+                    <input type="hidden" name="tab" value="tasks"><input type="hidden" name="view" value="kanban">
+                    <label class="wide">Ce qui ne va pas — ce texte devient la consigne du prochain passage
+                      <textarea name="comment" rows="3" required></textarea>
+                    </label>
+                    <button type="submit">Renvoyer en file</button>
+                  </form>
+                </details>
+              </div>
+            {% endif %}
+
+            {{ tf.selects(project, t, statuses, priorities, 'tasks', 'kanban', true) }}
+          </li>
+          {% else %}
+          <li class="kempty muted small">—</li>
+          {% endfor %}
+        </ul>
+      </section>
+    {% endfor %}
+  </div>
+  {% set cancelled = tasks|selectattr('status', 'equalto', 'cancelled')|list %}
+  {% if cancelled %}
+    <p class="muted small">{{ cancelled|length }} tâche(s) annulée(s), visibles dans la vue liste.</p>
+  {% endif %}
+{% else %}
+  {% set top_tasks = tasks|rejectattr('nested')|list %}
+  {% set open_tasks = top_tasks|selectattr('status', 'in', ['todo', 'in_progress', 'blocked'])|list %}
+  {% set done_tasks = top_tasks|selectattr('status', 'in', ['done', 'cancelled'])|list %}
+
+  <h2>Ouvertes <span class="count">{{ open_tasks|length }}</span></h2>
+  <ul class="task-list sortable" data-slug="{{ project.slug }}">
+    {% for t in open_tasks %}{{ task_row(t) }}{% endfor %}
+    {% if not open_tasks %}<li class="muted">Rien à faire. Tout est traité.</li>{% endif %}
+  </ul>
+
+  {% if done_tasks %}
+  <details class="done-block">
+    <summary><h2>Terminées <span class="count">{{ done_tasks|length }}</span></h2></summary>
+    <ul class="task-list">
+      {% for t in done_tasks %}{{ task_row(t) }}{% endfor %}
+    </ul>
+  </details>
+  {% endif %}
+{% endif %}

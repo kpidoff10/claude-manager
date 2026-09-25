@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% block title %}Notifications — claude-manager{% endblock %}
+{% block content %}
+<header class="page-head">
+  <div class="head-main">
+    <h1>Notifications</h1>
+    <p class="muted">La file est séquentielle : un agent qui pose une question arrête
+      tout ce qui suit. Ces messages évitent de l'apprendre en ouvrant la page.</p>
+  </div>
+</header>
+
+{% if message %}
+<div class="run-tests {{ 'ok' if message_ok else 'ko' }}">
+  <strong>{{ '✅' if message_ok else '❌' }} {{ message }}</strong>
+</div>
+{% endif %}
+
+{% if not token_present %}
+{# Sans jeton rien ne peut partir, et c'est la seule moitié du réglage que
+   l'interface ne peut pas poser elle-même : un secret ne va pas en base. #}
+<div class="orphans">
+  <strong>⚠ Aucun jeton de bot</strong>
+  <span class="muted">— la variable <code>CM_TELEGRAM_TOKEN</code> est absente de
+    l'environnement du conteneur. Rien ne partira tant qu'elle n'y est pas.</span>
+  <ol>
+    <li>Sur Telegram, écrire à <strong>@BotFather</strong> puis <code>/newbot</code>.
+      Il répond un jeton de la forme <code>1234567890:AA…</code>.</li>
+    <li>Poser <code>CM_TELEGRAM_TOKEN=…</code> dans le fichier <code>.env</code>
+      à côté du <code>docker-compose.yml</code>, puis
+      <code>docker compose up -d</code>.</li>
+    <li>Écrire un premier message au bot depuis Telegram — sans ça il n'a pas le
+      droit de t'écrire — et coller ci-dessous l'identifiant de conversation.</li>
+  </ol>
+</div>
+{% endif %}
+
+<form method="post" action="/reglages/set">
+  <h2>Destinataire</h2>
+  <div class="grid-form">
+    <label class="wide">Identifiant de conversation Telegram
+      <input name="chat_id" value="{{ chat_id }}" placeholder="par exemple 123456789">
+    </label>
+  </div>
+  <p class="muted small">Ce n'est pas un secret, il vit en base. Pour le trouver :
+    écrire au bot, puis ouvrir
+    <code>https://api.telegram.org/bot&lt;jeton&gt;/getUpdates</code> et lire
+    <code>message.chat.id</code>. Laisser vide désactive tout envoi.</p>
+
+  <h2>Quand me prévenir</h2>
+  <ul class="rows">
+    {% for e in evenements %}
+      <li class="row-card">
+        <label class="row-top">
+          <input type="checkbox" name="event" value="{{ e.cle }}"
+                 {% if e.actif %}checked{% endif %}>
+          <strong>{{ e.label }}</strong>
+        </label>
+        <p class="muted small">{{ e.detail }}</p>
+      </li>
+    {% endfor %}
+  </ul>
+
+  <button type="submit">Enregistrer</button>
+</form>
+
+<form method="post" action="/reglages/test" class="inline-form">
+  <button type="submit" class="btn ghost">Envoyer un message d'essai</button>
+</form>
+
+<h2>Répondre depuis Telegram</h2>
+{# Sans webhook, le lien ne va que dans un sens : les questions partent, les
+   réponses n'ont aucun chemin de retour. #}
+<div class="run-tests {{ 'ok' if webhook.url else 'ko' }}">
+  <strong>{{ '✅ Branché' if webhook.url else '○ Pas encore branché' }}</strong>
+  {% if webhook.url %}
+    <code>{{ webhook.url }}</code>
+    {% if webhook.last_error_message %}
+      <span class="error small">Dernière erreur signalée par Telegram :
+        {{ webhook.last_error_message }}</span>
+    {% endif %}
+    {% if webhook.pending_update_count %}
+      <span class="muted small">{{ webhook.pending_update_count }} message(s) en attente</span>
+    {% endif %}
+  {% else %}
+    <span class="muted">— les questions partent, mais tes réponses n'ont aucun
+      chemin de retour. Une fois branché, tu réponds directement dans le tchat :
+      un bouton pour les choix proposés, ou du texte libre en répondant au message.</span>
+  {% endif %}
+</div>
+<form method="post" action="/reglages/webhook" class="inline-form">
+  <button type="submit" class="btn">{{ 'Rebrancher' if webhook.url else 'Brancher' }} le webhook</button>
+</form>
+<p class="muted small">Telegram appellera <code>{{ webhook_url }}</code>. À rebrancher
+  si l'adresse publique change. Le jeton de la route est dérivé de
+  <code>CM_SESSION_SECRET</code> : il ne vit nulle part en base.</p>
+{% endblock %}

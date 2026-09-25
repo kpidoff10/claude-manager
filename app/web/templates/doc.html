@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block title %}{{ chemin }} — {{ project.name }}{% endblock %}
+{% block content %}
+<header class="page-head">
+  <div class="head-main">
+    <h1 class="doc-titre"><code>{{ chemin }}</code></h1>
+    <p class="muted small">
+      <a href="/p/{{ project.slug }}/profile#doc">← Documentation de {{ project.name }}</a>
+      · {{ (taille / 1024) | round | int }} Ko
+    </p>
+  </div>
+</header>
+
+{# D'où vient ce texte, exactement. Sans cette ligne on croit lire « la » doc
+   du projet alors qu'on lit celle d'une branche parmi d'autres. #}
+<div class="doc-source">
+  {% if depuis_disque %}
+    <span class="tag req">copie de travail</span>
+    <span class="muted small">lu sur le disque : ce fichier n'est pas encore
+      commité{% if reference %} sur <code>{{ reference }}</code>{% endif %}.</span>
+  {% else %}
+    <span class="tag owner">⑂ {{ reference }}</span>
+    <span class="muted small">lu par git au commit <code>{{ commit }}</code> —
+      la copie de travail n'est pas touchée.</span>
+  {% endif %}
+  {% if branches|length > 1 %}
+    <form method="get" class="doc-branches">
+      <label class="small muted">Voir sur
+        <select name="ref" onchange="this.form.submit()">
+          {% for b in branches %}
+            <option value="{{ b }}" {% if b == reference %}selected{% endif %}>{{ b }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <noscript><button class="small" type="submit">Afficher</button></noscript>
+    </form>
+  {% endif %}
+</div>
+
+{% if fiche.covers %}
+<div class="run-tests ok"><strong>Quand l'ouvrir</strong> <span>{{ fiche.covers }}</span></div>
+{% endif %}
+
+{% if tronque %}
+<div class="orphans">
+  <strong>⚠ Fichier tronqué</strong>
+  <span class="muted">— seul le début est affiché. Les fichiers de plusieurs
+    centaines de milliers de caractères se lisent dans le dépôt, pas ici.</span>
+</div>
+{% endif %}
+
+{% if demande %}
+  {% if demande.state == 'pending' %}
+    <div class="run-tests"><strong>⏳ Modification en attente</strong>
+      <span class="muted small">Le démon l'appliquera au prochain sondage — dix
+        secondes environ. Recharge la page.</span></div>
+  {% elif demande.state == 'failed' %}
+    <div class="run-tests ko"><strong>❌ Modification refusée</strong>
+      <span>{{ demande.detail }}</span></div>
+  {% elif demande.state == 'applied' and demande.commit_hash %}
+    <div class="run-tests ok"><strong>✅ Commité</strong>
+      <span class="muted small">{{ demande.detail }} · <code>{{ demande.commit_hash }}</code></span></div>
+  {% endif %}
+{% endif %}
+
+<article class="md doc-corps">{{ contenu | markdown }}</article>
+
+{% if modifiable %}
+<details class="inline-form doc-edition">
+  <summary class="btn">✎ Modifier ce fichier</summary>
+  {# Ça écrit dans le DÉPÔT, pas à côté : le commit porte sur ce seul fichier,
+     donc un travail en cours ailleurs n'est pas emporté. #}
+  <p class="muted small">Enregistrer écrit le fichier et le commite sur
+    <code>{{ reference }}</code>. Refusé si un agent travaille sur le projet, ou
+    si ce fichier a déjà des modifications non commitées.</p>
+  <form method="post" action="/p/{{ project.slug }}/doc/{{ chemin }}">
+    <textarea name="contenu" rows="22" spellcheck="false"
+              class="doc-editeur mono">{{ contenu }}</textarea>
+    <button type="submit">Enregistrer et commiter</button>
+  </form>
+</details>
+{% else %}
+<p class="muted small">Modification possible seulement sur la branche sortie
+  dans la copie principale.</p>
+{% endif %}
+{% endblock %}
