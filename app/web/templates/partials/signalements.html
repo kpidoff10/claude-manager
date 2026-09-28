@@ -1,0 +1,56 @@
+{# Signalements du projet, déposés sur /support. La décision se prend sur la
+   page du signalement : valider crée une tâche, refuser demande une raison. #}
+<section class="panel-section">
+  <div class="card-head">
+    <h2>À valider ({{ a_valider|length }})</h2>
+    <span class="muted small"><a href="/signalements/fiche/{{ project.slug }}">Fiche support</a>
+      · <a href="/signalements">Tous les signalements</a></span>
+  </div>
+  {% if a_valider %}
+  <ul class="ticket-admin-list">
+    {% for t in a_valider %}
+    <li><a href="/signalements/{{ t.id }}"><strong>{{ t.title or '(sans titre)' }}</strong></a>
+      {% if t.severity %}<span class="tag {{ 'hot' if t.severity == 'bloquant' }}">{{ t.severity }}</span>{% endif %}
+      {% if t.duplicate_of %}<span class="tag req">doublon de n° {{ t.duplicate_of }}</span>{% endif %}
+      <span class="muted small">— {{ t.reporter_name }}{% if t.reporter_agency %} ({{ t.reporter_agency }}){% endif %}
+        · {{ (t.submitted_at or '')[:16]|replace('T', ' ') }}</span></li>
+    {% endfor %}
+  </ul>
+  {% else %}<p class="muted">Aucun signalement en attente.</p>{% endif %}
+</section>
+
+{% if en_discussion %}
+<section class="panel-section">
+  <h2>En cours de discussion ({{ en_discussion|length }})</h2>
+  <ul class="ticket-admin-list">
+    {% for t in en_discussion %}
+    <li><a href="/signalements/{{ t.id }}">{{ t.title or 'Brouillon n° ' ~ t.id }}</a>
+      <span class="muted small">— {{ t.reporter_name }} · {{ t.user_messages }} message(s)
+        · {{ t.updated_at[:16]|replace('T', ' ') }}</span></li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+
+<section class="panel-section">
+  <h2>Traités ({{ traites|length }})</h2>
+  {% if traites %}
+  <ul class="ticket-admin-list">
+    {% for t in traites %}
+    {% set cle, libelle = statut_signaleur(t) %}
+    <li><a href="/signalements/{{ t.id }}">{{ t.title or '(sans titre)' }}</a>
+      <span class="support-state state-{{ cle }}">{{ libelle }}</span>
+      {% if t.task_id %}<a class="tag" href="/task/{{ t.task_id }}" data-task-dialog>tâche #{{ t.task_id }}</a>{% endif %}
+      <span class="muted small">— {{ t.reporter_name }}</span></li>
+    {% endfor %}
+  </ul>
+  {% else %}<p class="muted">Aucun pour l'instant.</p>{% endif %}
+</section>
+
+<section class="panel-section">
+  <h2>Qui peut signaler ({{ signaleurs|length }})</h2>
+  {% if signaleurs %}
+  <p class="muted small">{% for r in signaleurs %}{{ r.name }}{% if r.agency %} ({{ r.agency }}){% endif %}{% if not r.active %} — désactivé{% endif %}{{ ', ' if not loop.last }}{% endfor %}</p>
+  {% else %}<p class="muted small">Personne encore.</p>{% endif %}
+  <p class="muted small"><a href="/signalements#comptes">Gérer les comptes</a></p>
+</section>

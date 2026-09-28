@@ -44,7 +44,7 @@
 <div class="tabs-wrap">
 <nav class="tabs" aria-label="Sections du projet">
   {% for key, label in tabs %}
-    <a class="{% if key == tab %}active{% endif %}" href="/p/{{ project.slug }}/{{ key }}">{{ label }}</a>
+    <a class="{% if key == tab %}active{% endif %}" href="/p/{{ project.slug }}/{{ key }}">{{ label }}{% if key == 'signalements' and support_attente %} <span class="sig awaiting" title="Signalements à valider">{{ support_attente }}</span>{% endif %}</a>
   {% endfor %}
 </nav>
 </div>

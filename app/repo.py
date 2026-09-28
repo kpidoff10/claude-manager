@@ -2034,8 +2034,11 @@ def get_ticket(conn, ticket_id: int) -> dict | None:
 
 @_with_conn
 def list_tickets(conn, reporter_id: int | None = None, status: str | None = None,
-                 limit: int = 200) -> list[dict]:
+                 limit: int = 200, project_id: int | None = None) -> list[dict]:
     sql, params = _TICKET_SELECT + " WHERE 1 = 1", []
+    if project_id is not None:
+        sql += " AND t.project_id = ?"
+        params.append(project_id)
     if reporter_id is not None:
         sql += " AND t.reporter_id = ?"
         params.append(reporter_id)

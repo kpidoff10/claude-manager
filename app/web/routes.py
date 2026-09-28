@@ -46,7 +46,7 @@ templates.env.globals["static_v"] = config.STATIC_VERSION
 
 TABS = [("tasks", "Tâches"), ("milestones", "Jalons"), ("method", "Méthodologie"),
         ("stack", "Stack"), ("profile", "Fiche"), ("memory", "Mémoire"),
-        ("journal", "Journal")]
+        ("journal", "Journal"), ("signalements", "Signalements")]
 TAB_KEYS = [t[0] for t in TABS]
 
 
@@ -166,6 +166,13 @@ def _panel_context(request: Request, project: dict, tab: str, view: str = "liste
         ctx["memories"] = repo.list_memories(pid, limit=300)
     elif tab == "journal":
         ctx["journal"] = repo.list_journal(pid, limit=200)
+    elif tab == "signalements":
+        tickets = repo.list_tickets(project_id=pid, limit=300)
+        ctx["a_valider"] = [t for t in tickets if t["status"] == "submitted"]
+        ctx["en_discussion"] = [t for t in tickets
+                                if t["status"] == "draft" and t["user_messages"]]
+        ctx["traites"] = [t for t in tickets if t["status"] in ("accepted", "rejected")]
+        ctx["signaleurs"] = [r for r in repo.list_reporters() if pid in r["project_ids"]]
     return ctx
 
 
@@ -367,6 +374,8 @@ def project_tab(request: Request, slug: str, tab: str):
                 "tab_label": dict(TABS).get(tab, tab),
                 "live_version": repo.project_version(project["id"]),
                 "project_reminders": repo.list_reminders(project["id"]),
+                "support_attente": len(repo.list_tickets(project_id=project["id"],
+                                                         status="submitted")),
                 **_activity_context(project)})
     return templates.TemplateResponse(request, "project.html", ctx)
 
