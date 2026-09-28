@@ -1,196 +1,198 @@
 # claude-manager
 
-L'état persistant de tes projets, partagé entre **Claude Code** (par MCP et par
-des hooks) et **toi** (par une interface web), plus une file d'agents qui
-travaille pendant que tu fais autre chose.
+Persistent state for your projects, shared between **Claude Code** (through
+MCP and hooks) and **you** (through a web interface), plus an agent queue
+that works while you do something else.
 
-Le problème résolu n'est pas « suivre des tâches » : c'est **repartir de zéro à
-chaque session**. Claude relit le code, redécouvre les décisions, oublie ce qui
-était prévu. Ici, un hook `SessionStart` injecte l'état complet du projet dès
-l'ouverture de la session : avancement, tâches par priorité, décisions, pièges
-déjà rencontrés, stack, commandes, services, journal.
+The problem it solves is not "tracking tasks": it is **starting from scratch
+every session**. Claude re-reads the code, rediscovers past decisions, forgets
+what was planned. Here, a `SessionStart` hook injects the full project state
+as soon as the session opens: progress, tasks by priority, decisions, pitfalls
+already hit, stack, commands, services, log.
 
-> **Tu es une IA et on t'a confié ce dépôt pour l'installer ?** Va directement à
-> [Installation](#installation). Chaque étape dit quoi faire, comment vérifier,
-> et ce qui exige un humain. Lis d'abord [Règles pour une IA qui installe](#règles-pour-une-ia-qui-installe).
+> **You are an AI and someone handed you this repository to install?** Go
+> straight to [Installation](#installation). Every step says what to do, how
+> to verify it, and what requires a human. Read
+> [Rules for an AI doing the install](#rules-for-an-ai-doing-the-install) first.
+
+The web interface and the agent prompts are in French.
 
 ---
 
-## Ce qu'il fait
+## What it does
 
-| Domaine | Contenu |
+| Area | Content |
 |---|---|
-| **Projets** | slug, chemin disque, dépôt, statut, avancement calculé |
-| **Tâches** | priorité, statut, propriétaire, tags, sous-tâches, cases à cocher, tests manuels, rappels |
-| **Mémoire** | décisions, conventions, pièges, **erreurs à ne pas reproduire** — injectées dans chaque briefing |
-| **Stack** | technologies, versions, rôle, pistes abandonnées et pourquoi |
-| **Journal** | trace horodatée de ce qui a été fait |
-| **File d'agents** | une tâche mise en file est traitée par `claude -p` dans un worktree dédié, testée, commitée sur une branche ; tu relis puis tu fusionnes |
-| **Retours d'expérience** | un agent qui échoue ou dont tu refuses le travail laisse une mémoire « erreur » pour les suivants |
-| **Signalements** | des utilisateurs extérieurs décrivent un problème à une IA (qui lit le code en lecture seule) ; rien ne devient une tâche sans ta validation |
-| **Notifications** | Telegram : question d'un agent, tests rouges, signalement reçu, rappel échu… |
-| **Recherche** | plein texte sur tout (SQLite FTS5) |
+| **Projects** | slug, path on disk, repository, status, computed progress |
+| **Tasks** | priority, status, owner, tags, subtasks, checkboxes, manual tests, reminders |
+| **Memory** | decisions, conventions, pitfalls, **mistakes not to repeat** — injected into every briefing |
+| **Stack** | technologies, versions, role, abandoned options and why |
+| **Log** | timestamped record of what was done |
+| **Agent queue** | a queued task is handled by `claude -p` in a dedicated worktree, tested, committed on a branch; you review, then merge |
+| **Lessons learned** | an agent that fails, or whose work you reject, leaves a "mistake" memory for the next ones |
+| **Issue reports** | outside users describe a problem to an AI (which reads the code, read-only); nothing becomes a task without your approval |
+| **Notifications** | Telegram: agent question, failing tests, new issue report, reminder due… |
+| **Search** | full text over everything (SQLite FTS5) |
 
 ## Architecture
 
 ```
-                         ┌──────────── conteneur Docker ─────────────┐
- Claude Code ── MCP ───► │ FastAPI : /mcp/  /api/  interface web     │
- (hooks)    ── HTTP ───► │           /support (signaleurs)           │
- navigateur ───────────► │           /mcp-support/ (IA support)      │
-                         │        SQLite (WAL + FTS5) dans ./data    │
+                         ┌──────────── Docker container ─────────────┐
+ Claude Code ── MCP ───► │ FastAPI: /mcp/  /api/  web interface      │
+ (hooks)    ── HTTP ───► │          /support (issue reporters)       │
+ browser ──────────────► │          /mcp-support/ (support AI)       │
+                         │       SQLite (WAL + FTS5) in ./data       │
                          └───────────────────▲───────────────────────┘
-                                             │ HTTP (jeton)
+                                             │ HTTP (token)
                          ┌───────────────────┴───────────────────────┐
-                         │ démon hôte : worker/agent_worker.py       │
-                         │  lance `claude -p` (agents, leçons, IA    │
-                         │  des signalements), git, tests, fusions   │
+                         │ host daemon: worker/agent_worker.py       │
+                         │  runs `claude -p` (agents, lessons,       │
+                         │  support AI), git, tests, merges          │
                          └───────────────────────────────────────────┘
 ```
 
-Le conteneur ne peut rien lancer sur la machine : c'est le **démon**, sur
-l'hôte, sous le compte qui a Claude Code, qui exécute les agents.
+The container cannot run anything on the machine: the **daemon**, on the
+host, under the account that has Claude Code, runs the agents.
 
-- `app/repo.py` — **toutes** les requêtes SQL ; seule voie d'écriture
-- `app/briefing.py` — composition du briefing
-- `app/mcp_server.py` — outils MCP de Claude
-- `app/support_mcp.py` — MCP en lecture seule de l'IA des signalements
-- `app/web/` — interface (sans dépendance JavaScript externe)
-- `worker/agent_worker.py` — le démon
-- `hooks/` — hooks Claude Code (`SessionStart` : briefing ; `Stop` : rappel de consigner)
-- `skills/suivi-projet/` — skill Claude Code : quoi consigner et où
+- `app/repo.py` — **all** SQL queries; the only write path
+- `app/briefing.py` — builds the briefing
+- `app/mcp_server.py` — Claude's MCP tools
+- `app/support_mcp.py` — read-only MCP for the issue-report AI
+- `app/web/` — interface (no external JavaScript dependency)
+- `worker/agent_worker.py` — the daemon
+- `hooks/` — Claude Code hooks (`SessionStart`: briefing; `Stop`: reminder to record work)
+- `skills/suivi-projet/` — Claude Code skill: what to record, and where
 
 ---
 
 ## Installation
 
-### Prérequis
+### Prerequisites
 
-| Outil | Pourquoi | Vérifier |
+| Tool | Why | Check |
 |---|---|---|
-| Linux | l'hôte | — |
-| Docker + Compose v2 | le serveur | `docker compose version` |
-| Python ≥ 3.10 sur l'hôte | hooks et démon (bibliothèque standard seulement) | `python3 --version` |
-| git | démon, worktrees | `git --version` |
-| Claude Code, **connecté** | le démon lance `claude -p` | `claude --version` puis `claude -p "dis ok"` |
-| Traefik (facultatif) | exposition HTTPS publique | — |
+| Linux | the host | — |
+| Docker + Compose v2 | the server | `docker compose version` |
+| Python ≥ 3.10 on the host | hooks and daemon (standard library only) | `python3 --version` |
+| git | daemon, worktrees | `git --version` |
+| Claude Code, **logged in** | the daemon runs `claude -p` | `claude --version`, then `claude -p "say ok"` |
+| Traefik (optional) | public HTTPS exposure | — |
 
-L'utilisateur qui lance le démon doit pouvoir utiliser Docker
-(`docker ps` sans sudo) et avoir Claude Code connecté.
+The user running the daemon must be able to use Docker (`docker ps` without
+sudo) and have Claude Code logged in.
 
-### 1. Cloner
+### 1. Clone
 
-Cloner **dans le dossier qui contient tes projets** (le futur
-`CM_PROJECTS_ROOT`) : le conteneur relit les journaux des agents à travers ce
-montage.
+Clone **inside the folder that holds your projects** (the future
+`CM_PROJECTS_ROOT`): the container reads the agent logs through that mount.
 
 ```bash
-cd ~/projects            # ton dossier de projets
+cd ~/projects            # your projects folder
 git clone git@github.com:kpidoff10/claude-manager.git
 cd claude-manager
 mkdir -p data logs/runs
 ```
 
-Ailleurs, ça marche aussi, à condition de poser `CM_RUN_LOG_DIR` (étape 2) sur
-un chemin visible du conteneur.
+Elsewhere works too, as long as `CM_RUN_LOG_DIR` (step 2) points to a path the
+container can see.
 
-### 2. Configurer `.env`
+### 2. Configure `.env`
 
 ```bash
 cp .env.example .env
 python3 - <<'PY'
 import secrets, re, pathlib
 p = pathlib.Path(".env"); s = p.read_text()
-for cle in ("CM_API_TOKEN", "CM_SESSION_SECRET"):
-    s = re.sub(rf"^{cle}=.*$", f"{cle}={secrets.token_urlsafe(32)}", s, flags=re.M)
-# Mot de passe web sans caractères ambigus (I/l, O/0).
+for key in ("CM_API_TOKEN", "CM_SESSION_SECRET"):
+    s = re.sub(rf"^{key}=.*$", f"{key}={secrets.token_urlsafe(32)}", s, flags=re.M)
+# Web password without ambiguous characters (I/l, O/0).
 alpha = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789"
-mdp = "".join(secrets.choice(alpha) for _ in range(20))
-s = re.sub(r"^CM_WEB_PASSWORD=.*$", f"CM_WEB_PASSWORD={mdp}", s, flags=re.M)
+pwd = "".join(secrets.choice(alpha) for _ in range(20))
+s = re.sub(r"^CM_WEB_PASSWORD=.*$", f"CM_WEB_PASSWORD={pwd}", s, flags=re.M)
 p.write_text(s)
 PY
 chmod 600 .env
 ```
 
-Puis renseigner à la main :
+Then fill in by hand:
 
-| Variable | Valeur |
+| Variable | Value |
 |---|---|
-| `CM_PUBLIC_URL` | l'adresse publique, ex. `https://manager.mondomaine.fr` — ou `http://localhost:8099` sans exposition |
-| `CM_DOMAIN` | le domaine seul, pour Traefik (`manager.mondomaine.fr`) ; `localhost` si pas de Traefik |
-| `CM_PROJECTS_ROOT` | le dossier qui contient tes projets, ex. `/home/moi/projects`. Monté **au même chemin** dans le conteneur, en lecture seule |
-| `CM_PREVIEW_HOST` | IP ou nom de la machine, pour les liens d'aperçu des agents |
-| `CM_TELEGRAM_TOKEN` | facultatif (voir [Telegram](#telegram-facultatif)) |
-| `CM_RUN_LOG_DIR` | chemin absolu de `logs/runs` dans ce dépôt, ex. `/home/moi/projects/claude-manager/logs/runs` |
+| `CM_PUBLIC_URL` | the public address, e.g. `https://manager.example.com` — or `http://localhost:8099` without exposure |
+| `CM_DOMAIN` | the bare domain, for Traefik (`manager.example.com`); `localhost` without Traefik |
+| `CM_PROJECTS_ROOT` | the folder holding your projects, e.g. `/home/me/projects`. Mounted **at the same path** in the container, read-only |
+| `CM_PREVIEW_HOST` | IP or hostname of the machine, for the agents' preview links |
+| `CM_TELEGRAM_TOKEN` | optional (see [Telegram](#telegram-optional)) |
+| `CM_RUN_LOG_DIR` | absolute path of this repository's `logs/runs`, e.g. `/home/me/projects/claude-manager/logs/runs` |
 
-Facultatives : `CM_MAX_PARALLEL` (agents simultanés, 3), `CM_AGENT_TIMEOUT`
-(secondes par agent, 2700), `CM_MAX_RETRIES` (3), `CM_TZ` (`Europe/Paris`),
-`CM_WORKTREES` (copies de travail des agents, `~/worktrees` — **hors** du
-dossier des projets, pour qu'une copie ne soit jamais prise pour un projet).
+Optional: `CM_MAX_PARALLEL` (concurrent agents, 3), `CM_AGENT_TIMEOUT`
+(seconds per agent, 2700), `CM_MAX_RETRIES` (3), `CM_TZ` (`Europe/Paris`),
+`CM_WORKTREES` (agents' working copies, `~/worktrees` — **outside** the
+projects folder, so a copy is never mistaken for a project).
 
-### 3. Démarrer le serveur
+### 3. Start the server
 
 ```bash
 docker compose up -d --build
 curl -s http://127.0.0.1:8099/health      # → {"status":"ok",...}
 ```
 
-Le serveur écoute sur `127.0.0.1:8099` (hooks et démon). Avec Traefik, les
-labels de `docker-compose.yml` l'exposent en HTTPS sur `CM_DOMAIN` ; le
-conteneur doit alors partager un réseau avec Traefik (ajouter ce réseau au
-service si ton Traefik n'utilise pas le réseau par défaut).
+The server listens on `127.0.0.1:8099` (hooks and daemon). With Traefik, the
+labels in `docker-compose.yml` expose it over HTTPS on `CM_DOMAIN`; the
+container must then share a network with Traefik (add that network to the
+service if your Traefik does not use the default one).
 
-**Le code est copié dans l'image** : après toute modification de `app/`,
-`docker compose up -d --build`. Un simple `up -d` ne suffit que pour `.env`.
+**The code is copied into the image**: after any change to `app/`, run
+`docker compose up -d --build`. A plain `up -d` is only enough for `.env`.
 
-### 4. Brancher Claude Code
+### 4. Connect Claude Code
 
-**MCP** (portée utilisateur : disponible dans tous les projets) :
+**MCP** (user scope: available in every project):
 
 ```bash
 TOKEN=$(grep ^CM_API_TOKEN= .env | cut -d= -f2)
 claude mcp add --scope user --transport http claude-manager \
   "http://127.0.0.1:8099/mcp/" --header "Authorization: Bearer $TOKEN"
-claude mcp list          # claude-manager doit apparaître connecté
+claude mcp list          # claude-manager should show as connected
 ```
 
-La barre oblique finale de `/mcp/` est obligatoire. Sur une autre machine que
-le serveur, utiliser `CM_PUBLIC_URL` + `/mcp/`.
+The trailing slash of `/mcp/` is required. From another machine than the
+server, use `CM_PUBLIC_URL` + `/mcp/`.
 
-**Hooks** — à **fusionner** dans `~/.claude/settings.json` (ne jamais écraser
-le fichier : il contient d'autres réglages). Remplacer `CHEMIN` par le chemin
-absolu du dépôt :
+**Hooks** — **merge** into `~/.claude/settings.json` (never overwrite the
+file: it holds other settings). Replace `PATH_TO_REPO` with the absolute path
+of this repository:
 
 ```json
 {
   "hooks": {
     "SessionStart": [
       { "hooks": [ { "type": "command", "command": "python3",
-        "args": ["CHEMIN/hooks/session_start.py"], "timeout": 10,
-        "statusMessage": "Chargement de l'état du projet…" } ] }
+        "args": ["PATH_TO_REPO/hooks/session_start.py"], "timeout": 10,
+        "statusMessage": "Loading project state…" } ] }
     ],
     "Stop": [
       { "hooks": [ { "type": "command", "command": "python3",
-        "args": ["CHEMIN/hooks/stop_check.py"], "timeout": 20,
-        "statusMessage": "Vérification de l'état consigné…" } ] }
+        "args": ["PATH_TO_REPO/hooks/stop_check.py"], "timeout": 20,
+        "statusMessage": "Checking recorded state…" } ] }
     ]
   }
 }
 ```
 
-Si `SessionStart` ou `Stop` existent déjà, **ajouter** un élément à leur
-liste plutôt que de les remplacer.
+If `SessionStart` or `Stop` already exist, **append** an entry to their list
+instead of replacing them.
 
-**Skill** :
+**Skill**:
 
 ```bash
 mkdir -p ~/.claude/skills
 cp -r skills/suivi-projet ~/.claude/skills/
 ```
 
-### 5. Lancer le démon (et qu'il survive aux redémarrages)
+### 5. Run the daemon (and keep it running across reboots)
 
-Avec systemd (recommandé) :
+With systemd (recommended):
 
 ```bash
 mkdir -p ~/.config/systemd/user
@@ -202,19 +204,19 @@ systemctl --user enable --now claude-manager-worker
 tail -f logs/worker.log        # → « démon de file démarré »
 ```
 
-Sans systemd utilisateur (conteneur, session sans bus D-Bus), au démarrage
-de la machine via cron :
+Without a systemd user session (container, no D-Bus), start at boot via cron:
 
 ```bash
 ( crontab -l 2>/dev/null; echo "@reboot cd $PWD && python3 -u worker/agent_worker.py >> logs/worker.log 2>&1" ) | crontab -
 cd "$PWD" && setsid nohup python3 -u worker/agent_worker.py >> logs/worker.log 2>&1 < /dev/null &
 ```
 
-**Un seul démon à la fois.** Pour l'arrêter : `systemctl --user stop
-claude-manager-worker`, ou `kill <pid>` — attention, `pkill -f agent_worker`
-tue aussi le shell qui lance la commande, puisque sa ligne contient le motif.
+**Only one daemon at a time.** To stop it: `systemctl --user stop
+claude-manager-worker`, or `kill <pid>` — beware, `pkill -f agent_worker` also
+kills the shell running the command, since its own command line contains the
+pattern.
 
-### 6. Vérifier
+### 6. Verify
 
 ```bash
 curl -s http://127.0.0.1:8099/health
@@ -224,89 +226,87 @@ python3 scripts/mcp_call.py list_projects '{}'
 grep "démon de file démarré" logs/worker.log | tail -1
 ```
 
-Puis ouvrir `CM_PUBLIC_URL` dans un navigateur, se connecter avec
-`CM_WEB_PASSWORD`, et ouvrir une session Claude Code dans un projet enregistré :
-le briefing doit apparaître au démarrage.
+Then open `CM_PUBLIC_URL` in a browser, log in with `CM_WEB_PASSWORD`, and
+open a Claude Code session in a registered project: the briefing should show
+up at startup.
 
-**Enregistrer un premier projet** : depuis une session Claude Code dans le
-dossier du projet, demander « enregistre ce projet dans claude-manager et
-scanne sa stack » (outils `upsert_project` puis `scan_stack`).
-
----
-
-## Règles pour une IA qui installe
-
-- **Ne jamais afficher ni recopier** les valeurs de `.env` (jeton, mot de
-  passe, secret) dans une réponse, un commit ou un journal. Donner le mot de
-  passe web à l'humain une seule fois, à la fin, en lui disant de le noter.
-- **Ne jamais écraser** `~/.claude/settings.json` ni `~/.claude.json` :
-  fusionner. Faire une copie `.bak` avant d'y toucher.
-- `.env`, `data/` et `logs/` ne vont **jamais** dans git (déjà dans `.gitignore`).
-- Demander à l'humain, sans deviner : le domaine public, le dossier des
-  projets, s'il y a un Traefik. Tout le reste a une valeur par défaut.
-- Ce qui exige un humain, à lui signaler en fin d'installation :
-  1. le DNS du domaine (si exposition publique) ;
-  2. le bot Telegram (facultatif) ;
-  3. les clés de déploiement GitHub pour l'IA des signalements (facultatif).
-- Vérifier chaque étape par sa commande de contrôle avant de passer à la suivante.
+**Register a first project**: from a Claude Code session in the project's
+folder, ask "register this project in claude-manager and scan its stack"
+(tools `upsert_project`, then `scan_stack`).
 
 ---
 
-## Telegram (facultatif)
+## Rules for an AI doing the install
 
-1. Sur Telegram, écrire à **@BotFather**, `/newbot` → un jeton `1234:AA…`.
-2. Le mettre dans `CM_TELEGRAM_TOKEN`, puis `docker compose up -d`.
-3. **Écrire un premier message au bot** (sans ça il n'a pas le droit d'écrire).
-4. Interface web › Notifications : coller l'identifiant de conversation, brancher le webhook, cocher les événements.
+- **Never print or copy** the values in `.env` (token, password, secret) into a
+  reply, a commit or a log. Give the web password to the human once, at the
+  end, telling them to write it down.
+- **Never overwrite** `~/.claude/settings.json` or `~/.claude.json`: merge.
+  Make a `.bak` copy before touching them.
+- `.env`, `data/` and `logs/` **never** go into git (already in `.gitignore`).
+- Ask the human, don't guess: the public domain, the projects folder, whether
+  there is a Traefik. Everything else has a default.
+- What requires a human, to point out at the end of the install:
+  1. DNS for the domain (if publicly exposed);
+  2. the Telegram bot (optional);
+  3. GitHub deploy keys for the issue-report AI (optional).
+- Verify each step with its check command before moving to the next one.
 
-## Signalements (facultatif)
+---
 
-Des utilisateurs extérieurs (ex. des agences) déposent des tickets en
-discutant avec une IA sur `/support`. Tu gères tout depuis **Signalements**
-dans l'interface :
+## Telegram (optional)
 
-- **Comptes** : nom, identifiant, projets autorisés ; mot de passe généré, affiché une fois.
-- **Fiche support** par projet : ce que l'IA sait du logiciel, écrit pour un utilisateur. Et, pour qu'elle lise le code, le dépôt SSH et la branche.
-- **Validation** : chaque ticket envoyé attend ta décision. Valider crée une tâche (en file ou non) ; refuser demande une raison, visible par l'utilisateur.
+1. On Telegram, message **@BotFather**, `/newbot` → a token `1234:AA…`.
+2. Put it in `CM_TELEGRAM_TOKEN`, then `docker compose up -d`.
+3. **Send the bot a first message** (until you do, it is not allowed to write to you).
+4. Web interface › Notifications: paste the chat ID, connect the webhook, tick the events.
 
-**Lecture du code** : le démon tient une copie du dépôt dans
-`~/.cache/claude-manager/support-code/` avec une clé dédiée, **sans droit
-d'écriture** :
+## Issue reports (optional)
+
+Outside users (e.g. branch offices) file tickets by chatting with an AI on
+`/support`. You manage everything from **Signalements** in the interface:
+
+- **Accounts**: name, login, allowed projects; generated password, shown once.
+- **Support sheet** per project: what the AI knows about the software, written for an end user. And, so it can read the code, the SSH repository and branch.
+- **Approval**: every submitted ticket waits for your decision. Approving creates a task (queued or not); rejecting requires a reason, visible to the user.
+
+**Reading the code**: the daemon keeps a copy of the repository in
+`~/.cache/claude-manager/support-code/` with a dedicated key, **without write
+access**:
 
 ```bash
-ssh-keygen -t ed25519 -N "" -C "claude-manager support (lecture seule)" -f ~/.ssh/cm_support_deploy
+ssh-keygen -t ed25519 -N "" -C "claude-manager support (read-only)" -f ~/.ssh/cm_support_deploy
 cat ~/.ssh/cm_support_deploy.pub
 ```
 
-L'ajouter sur GitHub › dépôt › Settings › Deploy keys, **sans** « Allow write
-access ». Une clé de déploiement ne vaut que pour un dépôt : pour plusieurs
-dépôts, utiliser plutôt un compte machine en lecture seule.
+Add it on GitHub › repository › Settings › Deploy keys, **without** "Allow
+write access". A deploy key only works for one repository: for several, use a
+read-only machine account instead.
 
-**Ce que l'IA des signalements peut faire** : lire le code de la copie
-(`Read`, `Grep`, `Glob`, fichiers de secrets interdits) et appeler le MCP
-`/mcp-support/` (fiche support, signalements connus). Rien d'autre : ni
-écriture, ni commande, ni MCP de claude-manager, ni mémoire du projet. Son
-seul pouvoir est de proposer un texte de ticket.
+**What the issue-report AI can do**: read the code copy (`Read`, `Grep`,
+`Glob`; secret files are denied) and call the `/mcp-support/` MCP (support
+sheet, known reports). Nothing else: no writes, no commands, no claude-manager
+MCP, no project memory. Its only power is to propose a ticket text.
 
-## Sécurité
+## Security
 
-- `/mcp/` et `/api/` : jeton bearer (`CM_API_TOKEN`) ; interface web : mot de
-  passe (`CM_WEB_PASSWORD`) et cookie signé.
-- `/support` : comptes des signaleurs, session distincte (autre cookie, autre
-  sel) qui n'ouvre ni l'interface, ni l'API, ni le MCP.
-- `/mcp-support/` : jeton HMAC propre à chaque signalement, dérivé de
-  `CM_SESSION_SECRET` ; il ne voit que le projet de ce signalement.
-- La table `env_vars` ne contient que des **noms** de variables, jamais de valeurs.
-- Changer `CM_SESSION_SECRET` déconnecte tout le monde et invalide le webhook
-  Telegram (à rebrancher depuis Notifications).
+- `/mcp/` and `/api/`: bearer token (`CM_API_TOKEN`); web interface: password
+  (`CM_WEB_PASSWORD`) and signed cookie.
+- `/support`: reporter accounts, separate session (different cookie, different
+  salt) that opens neither the interface, the API nor the MCP.
+- `/mcp-support/`: HMAC token specific to each report, derived from
+  `CM_SESSION_SECRET`; it only sees that report's project.
+- The `env_vars` table only holds variable **names**, never values.
+- Changing `CM_SESSION_SECRET` logs everyone out and invalidates the Telegram
+  webhook (reconnect it from Notifications).
 
-## Exploitation
+## Operations
 
 ```bash
-docker compose up -d --build            # après une modification du code
-docker logs -f claude-manager           # journal du serveur
-tail -f logs/worker.log                 # journal du démon
-python3 scripts/mcp_call.py get_briefing '{"project":"mon-projet"}'
+docker compose up -d --build            # after a code change
+docker logs -f claude-manager           # server log
+tail -f logs/worker.log                 # daemon log
+python3 scripts/mcp_call.py get_briefing '{"project":"my-project"}'
 ```
 
-La base est `data/manager.db` (SQLite) : c'est le seul état à sauvegarder.
+The database is `data/manager.db` (SQLite): it is the only state to back up.
