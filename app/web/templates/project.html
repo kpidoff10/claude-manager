@@ -49,6 +49,10 @@
 </nav>
 </div>
 
+<div id="project-reminders" data-reminders-slug="{{ project.slug }}">
+  {% include "partials/project_reminders.html" %}
+</div>
+
 <div id="live-activity" data-live-slug="{{ project.slug }}" data-live-version="{{ live_version }}">
   {% include "partials/activity.html" %}
 </div>

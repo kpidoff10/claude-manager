@@ -1,0 +1,14 @@
+{% extends "support/base.html" %}
+{% block content %}
+<form class="card login support-login" method="post" action="/support/login">
+  <h1>Connexion</h1>
+  <p class="muted">Espace de signalement des problèmes. Vos identifiants vous ont été
+    transmis par l'administrateur.</p>
+  <input name="login" placeholder="Identifiant" value="{{ login|default('') }}"
+         autocomplete="username" autocapitalize="none" required autofocus>
+  <input type="password" name="password" placeholder="Mot de passe"
+         autocomplete="current-password" required>
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+  <button type="submit">Entrer</button>
+</form>
+{% endblock %}

@@ -44,6 +44,8 @@ CREATE TABLE IF NOT EXISTS tasks (
     order_index    REAL NOT NULL DEFAULT 0,
     blocked_reason TEXT,
     cancel_reason  TEXT,                            -- pourquoi la tâche a été abandonnée
+    -- remind_at / remind_note / reminded_at : anciennes colonnes de rappel,
+    -- reprises dans la table `reminders` (voir db._reprend_rappels).
     -- Autorise l'agent à travailler sur un dépôt non propre. Réservé aux tâches
     -- dont l'objet EST le désordre — commiter ce qui traîne, par exemple.
     allow_dirty    INTEGER NOT NULL DEFAULT 0,
@@ -191,7 +193,7 @@ CREATE TABLE IF NOT EXISTS practices (
 CREATE TABLE IF NOT EXISTS memories (
     id         INTEGER PRIMARY KEY,
     project_id INTEGER REFERENCES projects(id) ON DELETE CASCADE,   -- NULL = mémoire globale
-    kind       TEXT NOT NULL DEFAULT 'note',        -- decision | convention | gotcha | context | note
+    kind       TEXT NOT NULL DEFAULT 'note',        -- decision | convention | gotcha | erreur | context | note
     title      TEXT NOT NULL,
     body       TEXT NOT NULL,
     tags       TEXT NOT NULL DEFAULT '[]',
@@ -238,12 +240,98 @@ CREATE TABLE IF NOT EXISTS runs (
 CREATE INDEX IF NOT EXISTS idx_runs_task ON runs(task_id, id DESC);
 CREATE INDEX IF NOT EXISTS idx_runs_status ON runs(status);
 
+-- Rappels : sur un projet (« relancer le client lundi ») ou sur une tâche
+-- (« tester demain »). Dates en UTC ; un rappel reposé repart (reminded_at NULL).
+CREATE TABLE IF NOT EXISTS reminders (
+    -- AUTOINCREMENT : un numéro n'est jamais réattribué. Un bouton Telegram
+    -- d'un vieux message ne doit pas agir sur un rappel créé depuis.
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id  INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    task_id     INTEGER REFERENCES tasks(id) ON DELETE CASCADE,
+    note        TEXT,
+    remind_at   TEXT NOT NULL,
+    reminded_at TEXT,
+    created_at  TEXT NOT NULL,
+    updated_at  TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_reminders_due ON reminders(reminded_at, remind_at);
+CREATE INDEX IF NOT EXISTS idx_reminders_project ON reminders(project_id);
+
+-- Tests faits sur une tâche (ou sous-tâche) : historique, on n'écrase jamais.
+-- Un test raté puis refait réussi laisse deux lignes — c'est l'histoire utile.
+CREATE TABLE IF NOT EXISTS task_tests (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id  INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    task_id     INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+    what        TEXT NOT NULL,                     -- ce qui a été testé
+    result      TEXT NOT NULL,                     -- ok | ko | partial
+    environment TEXT,                              -- dev, prod, téléphone, navigateur…
+    detail      TEXT,                              -- constat, erreur, reste à faire
+    actor       TEXT NOT NULL DEFAULT 'claude',    -- claude | user
+    created_at  TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_task_tests_task ON task_tests(task_id, created_at);
+
 -- Réglages globaux (file en pause, demande d'arrêt), une ligne par clé.
 CREATE TABLE IF NOT EXISTS settings (
     key        TEXT PRIMARY KEY,
     value      TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
+
+-- Signalements : des utilisateurs extérieurs (agences) décrivent un problème
+-- en discutant avec une IA. Rien de ce qu'ils écrivent ne devient une tâche
+-- sans la validation de Kevin — voir repo.accept_ticket.
+CREATE TABLE IF NOT EXISTS reporters (
+    id            INTEGER PRIMARY KEY,
+    name          TEXT NOT NULL,
+    login         TEXT NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL,
+    agency        TEXT,
+    project_id    INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    active        INTEGER NOT NULL DEFAULT 1,
+    created_at    TEXT NOT NULL,
+    last_seen_at  TEXT
+);
+
+-- Projets sur lesquels un signaleur peut déposer. `reporters.project_id` reste
+-- le premier d'entre eux (historique) ; c'est cette table qui fait foi.
+CREATE TABLE IF NOT EXISTS reporter_projects (
+    reporter_id INTEGER NOT NULL REFERENCES reporters(id) ON DELETE CASCADE,
+    project_id  INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    PRIMARY KEY (reporter_id, project_id)
+);
+
+CREATE TABLE IF NOT EXISTS support_tickets (
+    id            INTEGER PRIMARY KEY,
+    reporter_id   INTEGER NOT NULL REFERENCES reporters(id) ON DELETE CASCADE,
+    project_id    INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    -- draft : discussion en cours · submitted : envoyé, attend Kevin ·
+    -- accepted : devenu une tâche · rejected : refusé, avec sa raison
+    status        TEXT NOT NULL DEFAULT 'draft',
+    awaiting_ai   INTEGER NOT NULL DEFAULT 0,       -- un message attend sa réponse
+    ai_error      TEXT,
+    title         TEXT,
+    page          TEXT,
+    summary       TEXT,                             -- ticket proposé par l'IA
+    severity      TEXT,
+    task_id       INTEGER REFERENCES tasks(id) ON DELETE SET NULL,
+    reject_reason TEXT,
+    created_at    TEXT NOT NULL,
+    updated_at    TEXT NOT NULL,
+    submitted_at  TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_tickets_reporter ON support_tickets(reporter_id, id DESC);
+CREATE INDEX IF NOT EXISTS idx_tickets_status ON support_tickets(status);
+
+CREATE TABLE IF NOT EXISTS support_messages (
+    id         INTEGER PRIMARY KEY,
+    ticket_id  INTEGER NOT NULL REFERENCES support_tickets(id) ON DELETE CASCADE,
+    role       TEXT NOT NULL,                       -- user | assistant
+    content    TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_support_messages ON support_messages(ticket_id, id);
 
 -- Index de recherche plein texte, alimenté par repo.py (pas par des triggers :
 -- une seule voie d'écriture, plus simple à garder cohérente).

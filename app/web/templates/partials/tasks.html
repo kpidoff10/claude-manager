@@ -1,4 +1,5 @@
 {% import "partials/_task_forms.html" as tf %}
+{% import "partials/_tests.html" as tt %}
 
 {# La checklist d'une tâche : ses sous-tâches, cochables d'un clic. Cocher
    passe la sous-tâche en `done`, décocher la remet en `todo`. Chaque case est
@@ -18,7 +19,8 @@
         <button type="submit" class="check-box" aria-label="{{ 'Décocher' if closed else 'Cocher' }}"
                 title="{{ 'Remettre à faire' if closed else 'Marquer comme fait' }}">{{ '☑' if closed else '☐' }}</button>
       </form>
-      <span class="check-title">{{ s.title }}</span>
+      <a class="check-title" href="/task/{{ s.id }}" data-task-dialog title="Ouvrir la sous-tâche (tests, détail)">{{ s.title }}</a>
+      {{ tt.badge(s.tests_summary) }}
       {% if s.status == 'cancelled' and s.cancel_reason %}<span class="check-reason">{{ s.cancel_reason }}</span>{% endif %}
       {% if s.status not in ('todo', 'done') %}<span class="tag status-{{ s.status }}">{{ s.status }}</span>{% endif %}
       <span class="muted small">#{{ s.id }}</span>
@@ -45,6 +47,30 @@
 </div>
 {% endmacro %}
 
+{# Rappel : un raccourci d'un clic, ou une date précise avec une note. #}
+{% macro reminder_form(t) %}
+{% set r = t.reminder %}
+<details class="reminder-box" {% if r %}open{% endif %}>
+  <summary class="btn ghost small">⏰ {% if r %}Rappel {{ r.remind_at|rappel }}{% else %}Me le rappeler{% endif %}</summary>
+  <form class="panel-form reminder-form" method="post" action="/p/{{ project.slug }}/tasks/{{ t.id }}/remind">
+    <input type="hidden" name="tab" value="tasks">
+    <input type="hidden" name="view" value="{{ view }}">
+    <input name="note" value="{{ r.note if r and r.note else '' }}" placeholder="Quoi ? (ex. tester sur le téléphone)"
+           aria-label="Note du rappel" class="reminder-note">
+    <div class="reminder-quick">
+      {% for valeur, label in rappel_raccourcis %}
+        <button type="submit" name="quand" value="{{ valeur }}" class="ghost small">{{ label }}</button>
+      {% endfor %}
+    </div>
+    <div class="reminder-precise">
+      <input type="datetime-local" name="quand_precis" value="{{ r.remind_at|rappel_champ if r else '' }}" aria-label="Date et heure précises">
+      <button type="submit" class="small">Poser</button>
+      {% if r %}<button type="submit" name="retirer" value="1" class="ghost small danger">Retirer</button>{% endif %}
+    </div>
+  </form>
+</details>
+{% endmacro %}
+
 {% macro task_row(t) %}
 <li class="task status-{{ t.status }} p{{ t.priority }}" draggable="true"
     data-id="{{ t.id }}" data-tags="{{ t.tags|join(' ') }}">
@@ -58,6 +84,8 @@
     </summary>
     {% if t.body %}<div class="md task-md">{{ t.body|markdown_taches(project.slug, t.id, view) }}</div>{% endif %}
     {{ checklist(t, subs) }}
+    {{ tt.block(project, t, t.tests or [], view) }}
+    {{ reminder_form(t) }}
     <form class="panel-form grid-form" method="post"
           action="/p/{{ project.slug }}/tasks/{{ t.id }}/update">
       <input type="hidden" name="tab" value="tasks">

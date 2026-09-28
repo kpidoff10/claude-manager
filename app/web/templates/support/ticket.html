@@ -1,0 +1,12 @@
+{% extends "support/base.html" %}
+{% block title %}{{ t.title or 'Nouveau signalement' }} — Signaler un problème{% endblock %}
+{% block head %}
+{# Sans JavaScript, la page se recharge seule tant que l'assistant réfléchit. #}
+{% if t.awaiting_ai %}<noscript><meta http-equiv="refresh" content="4"></noscript>{% endif %}
+{% endblock %}
+{% block content %}
+<p><a href="/support">← Mes signalements</a></p>
+<div id="conversation" data-ticket="{{ t.id }}">
+  {% include "support/_conversation.html" %}
+</div>
+{% endblock %}

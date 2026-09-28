@@ -4,8 +4,22 @@
 
 const panel = () => document.getElementById('panel');
 
-async function submitPanelForm(form) {
-  const target = panel();
+// `submitter` : le bouton cliqué. Sans lui, un formulaire à plusieurs boutons
+// (« Demain 9 h », « Ce soir »…) perdrait la valeur du bouton choisi.
+function formDataOf(form, submitter) {
+  try {
+    return submitter ? new FormData(form, submitter) : new FormData(form);
+  } catch (error) {
+    const data = new FormData(form);
+    if (submitter && submitter.name) data.append(submitter.name, submitter.value);
+    return data;
+  }
+}
+
+async function submitPanelForm(form, submitter) {
+  // Un formulaire peut viser un autre bloc que le panneau (data-target) : le
+  // bloc des rappels se recharge seul, sans toucher à l'onglet en cours.
+  const target = form.dataset.target ? document.getElementById(form.dataset.target) : panel();
   if (!target) return false;
 
   const confirmMessage = form.dataset.confirm;
@@ -15,17 +29,28 @@ async function submitPanelForm(form) {
   try {
     const response = await fetch(form.action, {
       method: 'POST',
-      body: new FormData(form),
+      body: formDataOf(form, submitter),
       headers: { 'X-CM-Panel': '1' },
       redirect: 'follow',
     });
     if (response.status === 401) { window.location.href = '/login'; return true; }
     if (!response.ok) throw new Error(response.statusText);
+    const keepOpen = form.dataset.target && !!target.querySelector('details[open]');
     target.innerHTML = await response.text();
+    if (keepOpen) target.querySelector('details')?.setAttribute('open', '');
     wire(target);
   } catch (error) {
     console.error(error);
-    form.submit();  // en cas d'échec, on retombe sur la soumission classique
+    // En cas d'échec, soumission classique. `submit()` ne transmet pas le
+    // bouton cliqué : on recopie sa valeur dans un champ caché.
+    if (submitter && submitter.name) {
+      const hidden = document.createElement('input');
+      hidden.type = 'hidden';
+      hidden.name = submitter.name;
+      hidden.value = submitter.value;
+      form.appendChild(hidden);
+    }
+    form.submit();
   } finally {
     target.classList.remove('loading');
   }
@@ -38,7 +63,7 @@ function wire(root) {
     form.dataset.wired = '1';
     form.addEventListener('submit', (event) => {
       event.preventDefault();
-      submitPanelForm(form);
+      submitPanelForm(form, event.submitter);
     });
   });
 
@@ -285,11 +310,22 @@ function wireLiveProject() {
   let version = strip.dataset.liveVersion;
   let pending = false;
 
-  const busy = () => {
+  const busy = (target = panel()) => {
     const el = document.activeElement;
-    const target = panel();
     return !!(target && el && target.contains(el)
       && el.matches('input:not([type=hidden]), textarea, select'));
+  };
+
+  const refreshReminders = async () => {
+    const block = document.getElementById('project-reminders');
+    if (!block || busy(block)) return;
+    const response = await fetch(`/p/${slug}/reminders`, { headers: { 'X-CM-Panel': '1' } });
+    if (!response.ok || response.redirected) return;
+    const wasOpen = !!block.querySelector('details[open]');
+    block.innerHTML = await response.text();
+    const details = block.querySelector('details');
+    if (details && wasOpen) details.open = true;
+    wire(block);
   };
 
   // Garder dépliées les tâches qui l'étaient : on repère chaque <details>
@@ -342,6 +378,7 @@ function wireLiveProject() {
       if (data.version !== version) {
         version = data.version;
         await refreshPanel();
+        await refreshReminders();
       }
     } catch (error) {
       console.error(error);
@@ -351,7 +388,65 @@ function wireLiveProject() {
   document.addEventListener('visibilitychange', () => { if (!document.hidden) tick(); });
 }
 
+// Fiche d'une tâche en boîte de dialogue : « ↳ #N » ouvre la tâche parente,
+// et depuis la fiche on peut remonter ou descendre de tâche en tâche. Le lien
+// mène à une vraie page : sans JavaScript, il fonctionne quand même.
+function wireTaskDialog() {
+  const dialog = document.getElementById('task-dialog');
+  if (!dialog || typeof dialog.showModal !== 'function') return;
+  const body = dialog.querySelector('[data-dialog-body]');
+
+  document.addEventListener('click', async (event) => {
+    const link = event.target.closest('[data-task-dialog]');
+    if (!link) return;
+    // Le badge est dans un <summary> : sans cela, le clic déplierait la tâche.
+    event.preventDefault();
+    event.stopPropagation();
+    try {
+      const response = await fetch(link.getAttribute('href'), { headers: { 'X-CM-Panel': '1' } });
+      if (response.status === 401 || response.redirected) { window.location.href = '/login'; return; }
+      if (!response.ok) throw new Error(response.statusText);
+      body.innerHTML = await response.text();
+      wire(body);  // formulaires de la fiche (tests) : envoyés en arrière-plan
+      if (!dialog.open) dialog.showModal();
+      dialog.scrollTop = 0;
+    } catch (error) {
+      console.error(error);
+      window.location.href = link.getAttribute('href');
+    }
+  }, true);
+
+  dialog.addEventListener('click', (event) => {
+    // Un clic sur le fond (hors du contenu) ferme la fiche.
+    if (event.target === dialog || event.target.closest('[data-dialog-close]')) dialog.close();
+  });
+}
+
+// Page des rappels : rechargée toutes les trente secondes, pour qu'un rappel
+// passe de « aujourd'hui » à « échus » sans action — sauf pendant la saisie.
+function wireAllReminders() {
+  const block = document.querySelector('[data-all-reminders]');
+  if (!block || block.dataset.liveWired) return;
+  block.dataset.liveWired = '1';
+  setInterval(async () => {
+    if (document.hidden) return;
+    const el = document.activeElement;
+    if (el && block.contains(el) && el.matches('input:not([type=hidden]), textarea, select')) return;
+    if (block.querySelector('details[open]')) return;  // formulaire d'ajout ouvert
+    try {
+      const response = await fetch('/rappels', { headers: { 'X-CM-Panel': '1' } });
+      if (!response.ok || response.redirected) return;
+      block.innerHTML = await response.text();
+      wire(block);
+    } catch (error) {
+      console.error(error);
+    }
+  }, 30000);
+}
+
 document.addEventListener('DOMContentLoaded', () => {
+  wireAllReminders();
+  wireTaskDialog();
   wire(document);
   wireDrawer();
   wireLiveRun();

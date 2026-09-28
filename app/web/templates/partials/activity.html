@@ -1,6 +1,15 @@
 {# Bandeau « qui travaille ici, maintenant », rafraîchi par /p/<slug>/live. #}
 {% set a = activity %}
 <div class="live-strip {{ 'busy' if a.runs or a.working else ('recent' if a.recent else 'idle') }}">
+  {% for r in a.reminders_due %}
+    {% if r.task_id %}
+    <a class="live-item reminder-due" href="/task/{{ r.task_id }}" data-task-dialog>
+      ⏰ Rappel : <strong>#{{ r.task_id }}</strong> {{ (r.note or r.task_title or '')[:70] }}
+    </a>
+    {% else %}
+    <span class="live-item reminder-due">⏰ Rappel : {{ (r.note or 'projet')[:80] }}</span>
+    {% endif %}
+  {% endfor %}
   {% for r in a.runs %}
     <a class="live-item" href="/runs/{{ r.id }}">
       <span class="pulse"></span> Agent sur <strong>#{{ r.task_id }}</strong> {{ r.title[:60] }} — voir en direct

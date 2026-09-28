@@ -505,6 +505,7 @@ pre.output { margin: 8px 0 0; background: var(--bg); border: 1px solid var(--bor
 .memory-head { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
 .tag.kind-decision { color: var(--accent); }
 .tag.kind-gotcha { color: var(--urgent); }
+.tag.kind-erreur { color: var(--urgent); }
 .tag.kind-convention { color: var(--ok); }
 
 .timeline { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 4px; }
@@ -922,8 +923,10 @@ pre.output { margin: 8px 0 0; background: var(--bg); border: 1px solid var(--bor
 /* Checklist : les sous-tâches d'une tâche */
 .checklist { margin: 8px 0 10px; }
 .checklist ul { list-style: none; margin: 0 0 6px; padding: 0; }
-.check-item { display: flex; align-items: center; gap: 8px; padding: 2px 0; }
-.check-item .check-title { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+/* La ligne passe à la ligne plutôt que d'écraser le titre : sur téléphone, une
+   raison d'abandon à côté le réduisait à une lettre par ligne. */
+.check-item { display: flex; align-items: center; gap: 4px 8px; padding: 2px 0; flex-wrap: wrap; }
+.check-item .check-title { flex: 1 1 12em; min-width: 0; overflow-wrap: anywhere; }
 .check-item.closed .check-title { text-decoration: line-through; color: var(--muted); }
 .check-box, .check-remove { background: transparent; border: 0; padding: 0 2px; cursor: pointer;
   color: var(--muted); font-size: 16px; line-height: 1; }
@@ -963,3 +966,131 @@ a.live-item:hover { color: var(--accent); }
 /* Raison d'abandon d'une tâche */
 .tag.cancel-reason { background: transparent; color: var(--muted); font-style: italic; white-space: normal; }
 .check-reason { color: var(--muted); font-style: italic; font-size: 12px; min-width: 0; overflow-wrap: anywhere; }
+/* Sous le titre, sur toute la largeur, aligné sur le texte et non sur la case. */
+.check-item .check-reason { order: 10; flex-basis: 100%; padding-left: 28px; }
+
+/* Fiche d'une tâche en boîte de dialogue */
+a.tag.parent-link { color: var(--accent); text-decoration: none; cursor: pointer; }
+a.tag.parent-link:hover { background: rgba(122, 162, 247, .15); }
+.task-dialog { width: min(680px, calc(100vw - 32px)); max-height: 85vh; padding: 0;
+  background: var(--panel); color: inherit; border: 1px solid var(--border); border-radius: 10px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, .5); overflow: auto; }
+.task-dialog::backdrop { background: rgba(0, 0, 0, .55); }
+.task-dialog-close { position: sticky; top: 8px; float: right; margin: 8px 8px 0 0; z-index: 1; }
+.task-card { padding: 18px 20px 16px; }
+.task-card-meta { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.task-card-title { font-size: 1.1rem; margin: 10px 0 4px; line-height: 1.35; overflow-wrap: anywhere; }
+.task-card-note { margin-top: 6px; font-size: 13px; color: var(--muted); font-style: italic; }
+.task-card-note.blocked { color: var(--urgent); font-style: normal; }
+.task-card-sub { font-size: .95rem; margin: 16px 0 6px; }
+.checklist-read { list-style: none; margin: 0; padding: 0; }
+.checklist-read li { display: flex; gap: 8px; align-items: baseline; padding: 2px 0; flex-wrap: wrap; }
+.checklist-read li.closed .check-title { text-decoration: line-through; color: var(--muted); }
+.checklist-read .check-title { color: inherit; }
+.task-card-foot { display: flex; justify-content: space-between; align-items: center; gap: 8px;
+  margin-top: 16px; padding-top: 10px; border-top: 1px solid var(--border); flex-wrap: wrap; }
+@media (max-width: 600px) { .task-dialog { max-height: 90vh; } .task-card { padding: 14px 16px; } }
+
+/* Rappels */
+.tag.reminder { background: rgba(122, 162, 247, .12); color: var(--accent); }
+.tag.reminder.due, .task-card-note.reminder.due { background: rgba(224, 175, 104, .18); color: var(--warn); font-weight: 600; }
+.task-card-note.reminder { font-style: normal; color: var(--accent); }
+.live-item.reminder-due { color: var(--warn); font-weight: 600; }
+.reminder-box { margin: 6px 0 10px; }
+.reminder-form { display: grid; gap: 8px; margin-top: 8px; }
+.reminder-note { width: 100%; }
+.reminder-quick, .reminder-precise { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.reminder-precise input[type=datetime-local] { min-width: 0; max-width: 100%; }
+
+/* Rappels de projet */
+#project-reminders { margin: 8px 0 0; }
+.project-reminders[open] { border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px 10px; }
+.reminder-list { list-style: none; margin: 8px 0; padding: 0; display: grid; gap: 6px; }
+.reminder-item { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+.reminder-text { flex: 1 1 200px; min-width: 0; overflow-wrap: anywhere; }
+.reminder-actions { display: inline-flex; gap: 4px; }
+.reminder-actions form { display: inline; }
+.sig.reminder-sig { color: var(--warn); }
+
+/* Page de tous les rappels */
+.reminder-group { margin: 18px 0; }
+.reminder-group h2 { font-size: 1rem; margin: 0 0 8px; }
+.reminder-group.group-echus h2 { color: var(--warn); }
+.reminder-group .reminder-item { padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px;
+  background: var(--panel); }
+.reminder-group .reminder-item.due { border-color: rgba(224, 175, 104, .5); }
+#all-reminders .reminder-precise select { max-width: 100%; }
+
+/* Tests consignés sur une tâche */
+.tests-box { margin: 6px 0 10px; }
+.tests-list { list-style: none; margin: 8px 0; padding: 0; display: grid; gap: 6px; }
+.test-item { display: flex; gap: 8px; align-items: flex-start; }
+.test-item .check-remove { margin-left: auto; }
+.test-item:hover .check-remove { opacity: 1; }
+.test-icon { flex: none; line-height: 1.4; }
+.test-body { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; min-width: 0; }
+.test-what { overflow-wrap: anywhere; }
+.test-detail { flex-basis: 100%; font-size: 12.5px; color: var(--muted); overflow-wrap: anywhere; }
+.test-item.result-ko .test-what { color: var(--urgent); }
+.test-form { display: grid; gap: 6px; margin-top: 8px; }
+.test-form input { width: 100%; min-width: 0; }
+.test-form-row { display: flex; gap: 6px; flex-wrap: wrap; }
+.test-form-row input { flex: 1 1 160px; }
+.tag.tests-badge { background: transparent; border: 1px solid var(--border); }
+.tag.tests-badge.last-ko { border-color: var(--urgent); }
+.tag.tests-badge.last-ok { border-color: rgba(158, 206, 106, .6); }
+.checklist a.check-title { color: inherit; text-decoration: none; }
+.checklist a.check-title:hover { color: var(--accent); }
+
+/* ==================================================================
+   Signalements — espace des utilisateurs d'agence (/support) et relecture
+   ================================================================== */
+body.support { display: block; min-height: 100vh; }
+.support-top { display: flex; justify-content: space-between; align-items: center; gap: 10px;
+  flex-wrap: wrap; padding: 12px 16px; border-bottom: 1px solid var(--border); background: var(--panel); }
+.support-top .brand { font-weight: 600; color: var(--text); text-decoration: none; }
+.support-main { max-width: 760px; margin: 0 auto; padding: 18px 16px 40px; }
+.support-login { margin: 40px auto; }
+.support-intro { margin-bottom: 22px; display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
+button.primary { background: var(--accent); color: #0f1115; border-color: var(--accent); font-weight: 600; }
+.support-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px; }
+.support-list a { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; padding: 12px;
+  background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius);
+  color: var(--text); text-decoration: none; }
+.support-list a:hover { border-color: var(--accent); }
+.support-title { flex: 1 1 14em; font-weight: 600; }
+.support-state { font-size: 12px; padding: 1px 8px; border-radius: 999px; background: var(--panel-2);
+  color: var(--muted); white-space: nowrap; }
+.support-state.state-recu, .support-state.state-valide { color: var(--accent); background: rgba(122, 162, 247, .12); }
+.support-state.state-en-cours { color: var(--warn); background: rgba(224, 175, 104, .12); }
+.support-state.state-corrige { color: var(--ok); background: rgba(158, 206, 106, .12); }
+.support-state.state-refuse { color: var(--urgent); background: rgba(247, 118, 142, .12); }
+.support-head { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: baseline; margin-bottom: 14px; }
+.support-note { padding: 10px 12px; border-left: 3px solid var(--urgent); background: var(--panel); margin-bottom: 12px; }
+.chat { display: flex; flex-direction: column; gap: 10px; margin: 12px 0 16px; }
+.bubble { max-width: 88%; padding: 10px 13px; border-radius: 14px; white-space: pre-wrap;
+  overflow-wrap: anywhere; line-height: 1.45; font-size: 14.5px; }
+.bubble.assistant { align-self: flex-start; background: var(--panel-2); border: 1px solid var(--border);
+  border-bottom-left-radius: 4px; }
+.bubble.user { align-self: flex-end; background: rgba(122, 162, 247, .16); border: 1px solid rgba(122, 162, 247, .35);
+  border-bottom-right-radius: 4px; }
+.bubble.typing { color: var(--muted); font-style: italic; }
+.bubble.error { color: var(--urgent); }
+.chat-form { display: flex; flex-direction: column; gap: 8px; align-items: flex-end; }
+.ticket-draft { border-color: var(--accent); margin: 8px 0 16px; display: flex; flex-direction: column; gap: 8px; }
+.ticket-draft h2 { margin: 0; }
+.ticket-summary { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 14px; }
+.ticket-admin-list, .reporter-list { list-style: none; padding: 0; margin: 0 0 14px; display: flex;
+  flex-direction: column; gap: 6px; }
+.ticket-admin-list li { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; }
+.reporter-list li { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 12px;
+  padding: 8px 0; border-bottom: 1px solid var(--border); }
+.reporter-list li.inactive { opacity: .55; }
+.reporter-actions { display: flex; gap: 6px; }
+.section-fold summary { cursor: pointer; list-style: none; }
+.section-fold summary h2 { display: inline; }
+code.secret-once { font-size: 15px; padding: 2px 8px; user-select: all; }
+.support-projects { display: flex; flex-wrap: wrap; gap: 8px; }
+.reporter-projects { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center; flex-basis: 100%;
+  border: 0; padding: 0; margin: 0; }
+.reporter-projects legend { padding: 0; margin-bottom: 4px; }

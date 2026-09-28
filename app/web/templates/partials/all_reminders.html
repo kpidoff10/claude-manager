@@ -1,0 +1,62 @@
+{# Tous les rappels, rangés par échéance. Rechargé seul (data-target). #}
+<details class="inline-form">
+  <summary class="btn">+ Nouveau rappel</summary>
+  <form class="panel-form reminder-form" method="post" action="/rappels/new" data-target="all-reminders">
+    <div class="reminder-precise">
+      <select name="project" aria-label="Projet" required>
+        {% for p in all_projects if p.status != 'archived' %}
+          <option value="{{ p.slug }}">{{ p.name }}</option>
+        {% endfor %}
+      </select>
+      <input name="note" placeholder="Quoi ? ex. relancer le client" aria-label="Note du rappel"
+             class="reminder-note" required>
+    </div>
+    <div class="reminder-quick">
+      {% for valeur, label in rappel_raccourcis %}
+        <button type="submit" name="quand" value="{{ valeur }}" class="ghost small">{{ label }}</button>
+      {% endfor %}
+    </div>
+    <div class="reminder-precise">
+      <input type="datetime-local" name="quand_precis" aria-label="Date et heure précises">
+      <button type="submit" class="small">Poser</button>
+    </div>
+  </form>
+</details>
+
+{% if not total %}
+  <p class="muted">Aucun rappel. Pose-en un ci-dessus, depuis une tâche, ou demande à Claude
+    (« rappelle-moi demain de tester »).</p>
+{% endif %}
+
+{% for cle, label, items in groupes if items %}
+<section class="reminder-group group-{{ cle }}">
+  <h2>{{ label }} <span class="count">{{ items|length }}</span></h2>
+  <ul class="reminder-list">
+    {% for r in items %}
+    <li class="reminder-item {{ 'due' if cle == 'echus' }}">
+      <span class="tag reminder {{ 'due' if cle == 'echus' }}">⏰ {{ r.remind_at|rappel }}</span>
+      <a class="tag" href="/p/{{ r.project_slug }}/tasks">{{ r.project_name }}</a>
+      <span class="reminder-text">
+        {% if r.task_id %}<a href="/task/{{ r.task_id }}" data-task-dialog class="tag parent-link">#{{ r.task_id }}</a>{% endif %}
+        {{ r.note or r.task_title or 'Rappel' }}
+        {% if r.task_id and r.note and r.task_title %}<span class="muted small">— {{ r.task_title }}</span>{% endif %}
+        {% if r.reminded_at %}<span class="muted small" title="Message Telegram envoyé">· envoyé</span>{% endif %}
+      </span>
+      <span class="reminder-actions">
+        {% for valeur, lab in [('+1h', '+1 h'), ('demain', 'Demain'), ('lundi', 'Lundi')] %}
+        <form class="panel-form inline" method="post" data-target="all-reminders"
+              action="/rappels/{{ r.id }}/snooze">
+          <input type="hidden" name="quand" value="{{ valeur }}">
+          <button type="submit" class="ghost small">{{ lab }}</button>
+        </form>
+        {% endfor %}
+        <form class="panel-form inline" method="post" data-target="all-reminders"
+              action="/rappels/{{ r.id }}/delete">
+          <button type="submit" class="ghost small" title="Retirer le rappel" aria-label="Retirer">✓</button>
+        </form>
+      </span>
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endfor %}

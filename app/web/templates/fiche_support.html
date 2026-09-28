@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Fiche support — {{ project.name }}{% endblock %}
+{% block content %}
+<p><a href="/signalements">← Signalements</a></p>
+<header class="page-head">
+  <div class="head-main">
+    <h1>Fiche support — {{ project.name }}</h1>
+    <p class="muted">Ce que l'IA sait du logiciel quand elle aide un signaleur. Écris-la
+      <strong>comme pour un utilisateur</strong> : écrans et à quoi ils servent, vocabulaire
+      métier, problèmes connus et leur contournement, ce qui est normal et ne mérite pas de
+      ticket. Rien d'interne : ni faille, ni secret, ni nom de serveur.</p>
+  </div>
+</header>
+{% if request.query_params.get('ok') %}<div class="run-tests ok"><strong>✅ Fiche enregistrée.</strong></div>{% endif %}
+<form method="post" action="/signalements/fiche/{{ project.slug }}">
+  <div class="grid-form">
+    <label>Dépôt du code, lu par l'IA (SSH)
+      <input name="support_git" value="{{ project.support_git or '' }}" placeholder="git@github.com:kpidoff/mylogis-app.git"></label>
+    <label>Branche
+      <input name="support_branch" value="{{ project.support_branch or '' }}" placeholder="master"></label>
+  </div>
+  <p class="muted small">L'IA lit une <strong>copie</strong> de ce dépôt, tenue à jour par le démon avec une clé
+    de déploiement <strong>sans droit d'écriture</strong>. Elle n'a ni commande ni outil d'écriture ;
+    les fichiers de secrets (.env, clés) lui sont interdits. Vide : pas d'accès au code.</p>
+  <textarea name="support_context" rows="24" placeholder="## Écrans principaux&#10;- Projets : …&#10;&#10;## Problèmes connus&#10;- …">{{ project.support_context or '' }}</textarea>
+  <button type="submit">Enregistrer</button>
+</form>
+{% endblock %}

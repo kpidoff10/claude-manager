@@ -4,7 +4,7 @@ C'est la pièce centrale : un seul appel doit suffire à savoir où en est un
 projet. Le contenu est donc trié par utilité — ce qui est en cours d'abord,
 le décor ensuite — et volontairement plafonné pour rester lisible.
 """
-from . import config, db, repo
+from . import config, db, rappels, repo
 
 MAX_PLAIN_TECHS = 10
 # Rôles posés d'office par le scanner : ils n'apprennent rien et ne justifient
@@ -13,6 +13,7 @@ GENERIC_ROLES = {"développement", "runtime", "image de base"}
 MAX_PINNED = 6
 MAX_TAGS = 18
 MAX_DECISIONS = 8
+MAX_ERREURS = 12
 MEMORY_CHARS = 260
 PRIORITY_MARK = {4: "🔴", 3: "🟠", 2: "·", 1: "·", 0: "·"}
 STATUS_MARK = {"in_progress": "▶", "blocked": "⛔", "todo": "○",
@@ -32,10 +33,13 @@ def build(project_ref, max_tasks: int = 15, max_journal: int = 10,
             "docs": repo.list_docs(pid, conn=conn),
             "milestones": repo.list_milestones(pid, conn=conn),
             "in_progress": repo.list_tasks(pid, status="in_progress", conn=conn),
+            "reminders": repo.list_reminders(pid, conn=conn),
+            "tests": repo.tests_by_task(pid, conn=conn),
             "blocked": repo.list_tasks(pid, status="blocked", conn=conn),
             "next_tasks": repo.list_tasks(pid, status="todo", limit=max_tasks, conn=conn),
             "recent_done": repo.list_tasks(pid, status="done", limit=5, conn=conn),
             "memories": repo.list_memories(pid, limit=25, conn=conn),
+            "erreurs": repo.list_memories(pid, kind="erreur", limit=MAX_ERREURS, conn=conn),
             "journal": repo.list_journal(pid, limit=max_journal, conn=conn),
             "technologies": repo.list_technologies(pid, conn=conn) if include_stack else [],
             "commands": repo.list_commands(pid, conn=conn),
@@ -45,6 +49,9 @@ def build(project_ref, max_tasks: int = 15, max_journal: int = 10,
             "preferences": repo.list_preferences(conn=conn),
             "tags": repo.list_tags(pid, conn=conn),
         }
+    for cle in ("in_progress", "blocked", "next_tasks", "recent_done"):
+        for t in data[cle]:
+            t["tests_summary"] = data["tests"].get(t["id"])
     return data
 
 
@@ -57,6 +64,10 @@ def _task_line(task: dict) -> str:
         extras.append(task["priority_label"])
     if task.get("parent_id"):
         extras.append(f"sous-tâche de #{task['parent_id']}")
+    s = task.get("tests_summary")
+    if s:
+        extras.append(f"tests {s['ok']}✅ {s['ko']}❌ {s['partial']}◐, dernier "
+                      f"{config.TEST_RESULTS[s['last']]}")
     if task["owner"] != "claude":
         extras.append(f"pour {task['owner']}")
     if task["tags"]:
@@ -133,6 +144,18 @@ def to_markdown(data: dict) -> str:
             else:
                 add(f"- ◔ **{m['name']}** — aucune tâche enregistrée{date}")
 
+    # Un rappel échu, c'est Kevin qui avait dit « plus tard » : c'est maintenant.
+    if data.get("reminders"):
+        add("")
+        add("## Rappels")
+        for r in data["reminders"]:
+            quand = rappels.libelle(r["remind_at"])
+            etat = "**échu**" if rappels.echu(r["remind_at"]) else "prévu"
+            sujet = (f"**#{r['task_id']}** {r.get('task_title') or ''}" if r.get("task_id")
+                     else "projet")
+            note = f" — {r['note']}" if r.get("note") else ""
+            add(f"- ⏰ {etat} {quand} · {sujet}{note} _(rappel {r['id']})_")
+
     if data["in_progress"]:
         add("")
         add("## En cours")
@@ -172,6 +195,17 @@ def to_markdown(data: dict) -> str:
                 f"{_truncate(m['body'], MEMORY_CHARS)} `#{m['id']}`")
         if hidden:
             add(f"- _…et {hidden} autre(s) mémoire(s) — `list_memories` pour les voir._")
+
+    # Section à part : mêlées aux autres mémoires, les erreurs en seraient
+    # chassées par le plafond. Épinglées, elles sont déjà affichées plus haut.
+    erreurs = [m for m in data.get("erreurs") or [] if not m["pinned"]]
+    if erreurs:
+        add("")
+        add("## Erreurs déjà commises — ne pas les reproduire")
+        for m in erreurs:
+            add(f"- ✗ **{m['title']}** — {_truncate(m['body'], MEMORY_CHARS)} `#{m['id']}`")
+        add("_Une faute qui t'a coûté du temps et qu'un autre pourrait refaire : "
+            "`add_memory(kind='erreur')`, titre écrit comme la règle à suivre._")
 
     if data["technologies"]:
         add("")

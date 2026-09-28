@@ -1,0 +1,52 @@
+{# Tests consignés sur une tâche : historique + formulaire d'ajout.
+   `fiche` : true dans la boîte de dialogue, où le formulaire recharge la fiche. #}
+{% macro badge(s) %}
+{% if s %}
+<span class="tag tests-badge last-{{ s.last }}"
+      title="{{ s.total }} test(s) : {{ s.ok }} ok, {{ s.ko }} ko, {{ s.partial }} partiel(s) — dernier : {{ s.last }}">🧪 {{ test_results[s.last] }}{% if s.total > 1 %} {{ s.total }}{% endif %}</span>
+{% endif %}
+{% endmacro %}
+
+{% macro block(project, t, tests, view='liste', fiche=false) %}
+{% set cible = 'data-target=task-dialog-body' if fiche else '' %}
+<details class="tests-box" {% if fiche and tests %}open{% endif %}>
+  <summary class="btn ghost small">🧪 Tests{% if tests %} <span class="count">{{ tests|length }}</span>{% endif %}</summary>
+  {% if tests %}
+  <ul class="tests-list">
+    {% for x in tests %}
+    <li class="test-item result-{{ x.result }}">
+      <span class="test-icon" title="{{ x.result }}">{{ test_results[x.result] }}</span>
+      <span class="test-body">
+        <span class="test-what">{{ x.what }}</span>
+        {% if x.environment %}<span class="tag">{{ x.environment }}</span>{% endif %}
+        <span class="muted small">{{ 'moi' if x.actor == 'user' else x.actor }} · {{ x.created_at[:16]|replace('T', ' ') }} UTC</span>
+        {% if x.detail %}<span class="test-detail">{{ x.detail }}</span>{% endif %}
+      </span>
+      <form class="panel-form inline" method="post" {{ cible }}
+            action="/p/{{ project.slug }}/tasks/{{ t.id }}/tests/{{ x.id }}/delete"
+            data-confirm="Supprimer ce test ?">
+        <input type="hidden" name="tab" value="tasks"><input type="hidden" name="view" value="{{ view }}">
+        {% if fiche %}<input type="hidden" name="retour" value="fiche">{% endif %}
+        <button type="submit" class="check-remove" aria-label="Supprimer le test" title="Supprimer">×</button>
+      </form>
+    </li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+  <form class="panel-form test-form" method="post" {{ cible }}
+        action="/p/{{ project.slug }}/tasks/{{ t.id }}/tests">
+    <input type="hidden" name="tab" value="tasks"><input type="hidden" name="view" value="{{ view }}">
+    {% if fiche %}<input type="hidden" name="retour" value="fiche">{% endif %}
+    <input name="what" placeholder="Ce qui a été testé" aria-label="Ce qui a été testé" required>
+    <div class="test-form-row">
+      <input name="environment" placeholder="Où ? (dev, téléphone…)" aria-label="Environnement" list="test-envs">
+      <input name="detail" placeholder="Constat (facultatif)" aria-label="Constat">
+    </div>
+    <div class="test-form-row">
+      <button type="submit" name="result" value="ok" class="small">✅ OK</button>
+      <button type="submit" name="result" value="partial" class="ghost small">◐ Partiel</button>
+      <button type="submit" name="result" value="ko" class="ghost small danger">❌ KO</button>
+    </div>
+  </form>
+</details>
+{% endmacro %}

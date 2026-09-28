@@ -70,6 +70,18 @@ EVENEMENTS: dict[str, dict] = {
                   "n'a commité depuis.",
         "defaut": True,
     },
+    "reminder": {
+        "label": "Un rappel arrive à échéance",
+        "detail": "Un rappel posé sur un projet ou une tâche (« teste ça demain »), "
+                  "avec des boutons pour le repousser d'une heure, à demain, ou le retirer.",
+        "defaut": True,
+    },
+    "ticket_submitted": {
+        "label": "Un utilisateur d'agence envoie un signalement",
+        "detail": "Il attend ta validation avant de devenir une tâche : rien ne part "
+                  "en file sans toi.",
+        "defaut": True,
+    },
     "task_orphan": {
         "label": "Une tâche reste « en cours » sans que rien ne la porte",
         "detail": "Marquée en cours puis laissée là : la file ne la réclamera "
@@ -272,6 +284,45 @@ def demande(task_id: int, titre: str, lignes: list[str], options: list[str] | No
             log.warning("question #%s non envoyée : %s", task_id, res)
     except Exception:  # noqa: BLE001 — poser la question ne doit rien casser
         log.exception("question #%s : envoi impossible", task_id)
+
+
+def rappelle(rappel: dict) -> bool:
+    """Envoie un rappel avec ses boutons. Vrai si c'est parti — ou s'il n'y
+    avait rien à envoyer (Telegram non configuré, événement décoché) : dans les
+    deux cas, inutile de retenter. Faux seulement sur un échec d'envoi."""
+    try:
+        if not est_actif("reminder") or not configure():
+            return True
+        lignes = [f"⏰ Rappel — {rappel.get('project_name', '?')}"]
+        if rappel.get("task_id"):
+            lignes.append(f"#{rappel['task_id']} {rappel.get('task_title') or ''}")
+        if rappel.get("note"):
+            lignes.append(f"👉 {rappel['note']}")
+        lignes.append(lien_tache(rappel["task_id"]) if rappel.get("task_id")
+                      else lien_projet(rappel.get("project_slug", "")))
+        rid = rappel["id"]
+        clavier = {"inline_keyboard": [[
+            {"text": "+1 h", "callback_data": f"rp:{rid}:1h"},
+            {"text": "Demain 9 h", "callback_data": f"rp:{rid}:demain"},
+            {"text": "✓ C'est bon", "callback_data": f"rp:{rid}:ok"},
+        ]]}
+        ok, res = appel("sendMessage", {"chat_id": chat_id(), "text": "\n".join(lignes),
+                                        "disable_web_page_preview": True,
+                                        "reply_markup": clavier})
+        if not ok:
+            log.warning("rappel %s non envoyé : %s", rid, res)
+        return ok
+    except Exception:  # noqa: BLE001 — un rappel ne doit rien casser
+        log.exception("rappel %s : envoi impossible", rappel.get("id"))
+        return False
+
+
+def lien_projet(slug: str) -> str:
+    return f"{config.PUBLIC_URL.rstrip('/')}/p/{slug}/tasks"
+
+
+def lien_tache(task_id: int) -> str:
+    return f"{config.PUBLIC_URL.rstrip('/')}/task/{task_id}"
 
 
 def abrege(texte: str, taille: int) -> str:

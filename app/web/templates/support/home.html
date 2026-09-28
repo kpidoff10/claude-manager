@@ -1,0 +1,42 @@
+{% extends "support/base.html" %}
+{% block content %}
+<section class="support-intro">
+  {% if plusieurs %}
+  <h1>Un problème ?</h1>
+  <p class="muted">Choisissez le logiciel concerné, puis décrivez le problème à l'assistant : il vous
+    posera quelques questions pour bien le comprendre, et vous proposera un ticket à envoyer.
+    L'équipe le relit avant toute correction.</p>
+  <div class="support-projects">
+    {% for p in reporter.projects %}
+    <form method="post" action="/support/new">
+      <input type="hidden" name="project_id" value="{{ p.id }}">
+      <button type="submit" class="primary">＋ {{ p.name }}</button>
+    </form>
+    {% endfor %}
+  </div>
+  {% else %}
+  <h1>Un problème sur {{ reporter.projects[0].name if reporter.projects else '' }} ?</h1>
+  <p class="muted">Décrivez-le à l'assistant : il vous posera quelques questions pour bien le
+    comprendre, puis vous proposera un ticket à envoyer. L'équipe le relit avant toute correction.</p>
+  <form method="post" action="/support/new"><button type="submit" class="primary">＋ Signaler un problème</button></form>
+  {% endif %}
+</section>
+
+<h2>Mes signalements</h2>
+{% if tickets %}
+<ul class="support-list">
+  {% for t in tickets %}
+  {% set cle, libelle = statut_signaleur(t) %}
+  <li>
+    <a href="/support/t/{{ t.id }}">
+      <span class="support-title">{{ t.title or 'Signalement en cours de rédaction' }}</span>
+      <span class="support-state state-{{ cle }}">{{ libelle }}</span>
+      <span class="muted small">n° {{ t.id }}{% if plusieurs %} · {{ t.project_name }}{% endif %} · {{ (t.submitted_at or t.created_at)[:10] }}</span>
+    </a>
+  </li>
+  {% endfor %}
+</ul>
+{% else %}
+<p class="muted">Aucun signalement pour l'instant.</p>
+{% endif %}
+{% endblock %}

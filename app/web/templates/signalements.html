@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% block title %}Signalements — claude-manager{% endblock %}
+{% block content %}
+<header class="page-head">
+  <div class="head-main">
+    <h1>Signalements</h1>
+    <p class="muted">Déposés par les utilisateurs d'agence après une discussion avec l'IA.
+      <strong>Rien ne devient une tâche sans ta validation.</strong>
+      Espace des signaleurs : <a href="/support">/support</a></p>
+  </div>
+</header>
+
+<h2>À valider ({{ a_valider|length }})</h2>
+{% if a_valider %}
+<ul class="ticket-admin-list">
+  {% for t in a_valider %}
+  <li><a href="/signalements/{{ t.id }}"><strong>{{ t.title or '(sans titre)' }}</strong></a>
+    {% if t.duplicate_of %}<span class="tag req">doublon de n° {{ t.duplicate_of }}</span>{% endif %}
+    <span class="muted small">— {{ t.reporter_name }}{% if t.reporter_agency %} ({{ t.reporter_agency }}){% endif %}
+      · {{ t.project_name }} · {{ (t.submitted_at or '')[:16]|replace('T', ' ') }}</span></li>
+  {% endfor %}
+</ul>
+{% else %}<p class="muted">Rien en attente.</p>{% endif %}
+
+{% if brouillons %}
+<details class="section-fold">
+  <summary><h2>Discussions en cours ({{ brouillons|length }})</h2></summary>
+  <ul class="ticket-admin-list">
+    {% for t in brouillons %}
+    <li><a href="/signalements/{{ t.id }}">{{ t.title or 'Brouillon n° ' ~ t.id }}</a>
+      <span class="muted small">— {{ t.reporter_name }} · {{ t.messages }} message(s)</span></li>
+    {% endfor %}
+  </ul>
+</details>
+{% endif %}
+
+{% if traites %}
+<details class="section-fold">
+  <summary><h2>Déjà traités</h2></summary>
+  <ul class="ticket-admin-list">
+    {% for t in traites %}
+    {% set cle, libelle = statut_signaleur(t) %}
+    <li><a href="/signalements/{{ t.id }}">{{ t.title or '(sans titre)' }}</a>
+      <span class="support-state state-{{ cle }}">{{ libelle }}</span>
+      {% if t.task_id %}<a class="muted small" href="/task/{{ t.task_id }}" data-task-dialog>tâche #{{ t.task_id }}</a>{% endif %}
+      <span class="muted small">— {{ t.reporter_name }}</span></li>
+    {% endfor %}
+  </ul>
+</details>
+{% endif %}
+
+<h2 id="comptes">Comptes des signaleurs</h2>
+{% if nouveau == 'erreur' %}
+<div class="run-tests ko"><strong>❌ Compte non créé :</strong> nom, identifiant et projet sont
+  obligatoires, et l'identifiant doit être libre.</div>
+{% elif nouveau and motdepasse %}
+<div class="run-tests ok">
+  <strong>✅ Identifiants de {{ nouveau }}</strong> — mot de passe : <code class="secret-once">{{ motdepasse }}</code>
+  <p class="muted small">Affiché une seule fois : il n'est conservé nulle part en clair. Transmets-le
+    avec l'adresse de connexion : <code>{{ public_url }}/support</code></p>
+</div>
+{% endif %}
+{% if reporters %}
+<ul class="reporter-list">
+  {% for r in reporters %}
+  <li class="{{ '' if r.active else 'inactive' }}">
+    <span><strong>{{ r.name }}</strong> <code>{{ r.login }}</code>
+      <span class="muted small">{{ r.agency or '' }} · {{ r.tickets }} ticket(s)
+        · {{ 'vu le ' ~ r.last_seen_at[:10] if r.last_seen_at else 'jamais connecté' }}</span></span>
+    <form class="reporter-projects" method="post" action="/signalements/reporters/{{ r.id }}/projects">
+      {% for p in projects %}
+      <label class="check"><input type="checkbox" name="projects" value="{{ p.slug }}"
+        {{ 'checked' if p.id in r.project_ids }}> {{ p.name }}</label>
+      {% endfor %}
+      <button type="submit" class="small">Enregistrer les projets</button>
+    </form>
+    <span class="reporter-actions">
+      <form method="post" action="/signalements/reporters/{{ r.id }}/reset"
+            onsubmit="return confirm('Générer un nouveau mot de passe pour {{ r.name }} ?')">
+        <button type="submit" class="small">Nouveau mot de passe</button></form>
+      <form method="post" action="/signalements/reporters/{{ r.id }}/toggle">
+        <button type="submit" class="small {{ 'danger' if r.active }}">{{ 'Désactiver' if r.active else 'Réactiver' }}</button></form>
+    </span>
+  </li>
+  {% endfor %}
+</ul>
+{% endif %}
+<form class="grid-form card" method="post" action="/signalements/reporters">
+  <label>Nom <input name="name" required placeholder="Marie Dupont"></label>
+  <label>Identifiant <input name="login" required placeholder="marie.dupont" autocapitalize="none"></label>
+  <label>Agence <input name="agency" placeholder="Arlogis Rennes"></label>
+  <fieldset class="wide reporter-projects">
+    <legend class="muted small">Projets sur lesquels il peut signaler</legend>
+    {% for p in projects %}
+    <label class="check"><input type="checkbox" name="projects" value="{{ p.slug }}"
+      {{ 'checked' if p.slug == 'mylogis' }}> {{ p.name }}</label>
+    {% endfor %}
+  </fieldset>
+  <button type="submit">Créer le compte</button>
+</form>
+
+<h2>Fiches support</h2>
+<p class="muted small">Le <strong>seul</strong> contexte projet que voit l'IA des signaleurs :
+  jamais la mémoire, le journal ni le briefing (audit, failles, décisions internes).</p>
+<ul class="ticket-admin-list">
+  {% for p in projects %}
+  <li><a href="/signalements/fiche/{{ p.slug }}">{{ p.name }}</a>
+    <span class="muted small">{{ 'rédigée' if p.support_context else 'vide' }}</span></li>
+  {% endfor %}
+</ul>
+{% endblock %}

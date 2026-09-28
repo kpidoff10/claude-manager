@@ -130,7 +130,8 @@ def rendu(texte: str, cases: dict | None = None) -> str:
     """Markdown → HTML. L'entrée est du texte brut, jamais du HTML.
 
     `cases` rend les cases cliquables : {"action": url du POST, "champs":
-    {nom: valeur} à renvoyer}. Ces valeurs viennent de l'application, pas du
+    {nom: valeur} à renvoyer, "cible": id du bloc à réafficher (facultatif —
+    la fiche en boîte de dialogue se recharge elle-même, pas le panneau)}. Ces valeurs viennent de l'application, pas du
     texte ; elles sont échappées quand même. Sans `cases`, ☐ / ☑ en lecture.
     """
     if not texte:
@@ -174,7 +175,8 @@ def rendu(texte: str, cases: dict | None = None) -> str:
         caches = "".join(f'<input type="hidden" name="{html.escape(str(k))}" value="{html.escape(str(v))}">'
                          for k, v in champs.items())
         titre = "Décocher" if coche else "Cocher"
-        return (f'<li class="{classe}"><form class="panel-form inline" method="post"'
+        cible = (f' data-target="{html.escape(cases["cible"])}"' if cases.get("cible") else "")
+        return (f'<li class="{classe}"><form class="panel-form inline" method="post"{cible}'
                 f' action="{html.escape(cases["action"])}">{caches}'
                 f'<button type="submit" class="md-box" title="{titre}" aria-label="{titre}">'
                 f'{"☑" if coche else "☐"}</button></form> {reste}</li>')

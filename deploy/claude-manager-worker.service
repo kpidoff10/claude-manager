@@ -1,0 +1,28 @@
+# Démon de file de claude-manager (agents, retours d'expérience, IA des
+# signalements). Service systemd UTILISATEUR : il tourne sous le compte qui a
+# Claude Code installé et connecté — c'est lui qui lance `claude`.
+#
+# Installation (remplacer __CHEMIN__ par le dossier du dépôt) :
+#   mkdir -p ~/.config/systemd/user
+#   sed "s|__CHEMIN__|$PWD|g" deploy/claude-manager-worker.service \
+#       > ~/.config/systemd/user/claude-manager-worker.service
+#   loginctl enable-linger "$USER"          # démarre sans session ouverte
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now claude-manager-worker
+[Unit]
+Description=claude-manager — démon de file d'agents
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=__CHEMIN__
+ExecStart=/usr/bin/env python3 -u worker/agent_worker.py
+Restart=on-failure
+RestartSec=10
+StandardOutput=append:__CHEMIN__/logs/worker.log
+StandardError=append:__CHEMIN__/logs/worker.log
+# `claude` s'installe souvent dans ~/.local/bin, absent du PATH de systemd.
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+
+[Install]
+WantedBy=default.target

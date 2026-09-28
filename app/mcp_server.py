@@ -7,7 +7,7 @@ qu'il fait.
 from mcp.server.fastmcp import FastMCP
 
 from . import briefing as briefing_mod
-from . import config, db, notify, repo, scanner
+from . import config, db, notify, rappels, repo, scanner
 
 mcp = FastMCP("claude-manager", stateless_http=True)
 # Servi à la racine du point de montage : l'application monte déjà sur /mcp.
@@ -90,6 +90,96 @@ def upsert_project(slug: str, name: str | None = None, path: str | None = None,
 # --------------------------------------------------------------------------
 # Tâches
 # --------------------------------------------------------------------------
+
+
+def _rappel_out(r: dict) -> dict:
+    return {"id": r["id"], "project": r.get("project_slug"),
+            "task_id": r.get("task_id"), "task_title": r.get("task_title"),
+            "note": r.get("note"), "when": rappels.libelle(r["remind_at"]),
+            "remind_at": r["remind_at"], "due": rappels.echu(r["remind_at"]),
+            "sent": bool(r.get("reminded_at"))}
+
+
+@mcp.tool()
+def record_test(task_id: int, what: str, result: str, environment: str | None = None,
+                detail: str | None = None) -> dict:
+    """Consigne un test fait sur une tâche ou une sous-tâche : ce qui a été
+    testé, le résultat (`ok`, `ko` ou `partial`), où (`environment` : dev, prod,
+    téléphone, navigateur…) et le constat (`detail` : erreur vue, ce qui reste).
+
+    À appeler après chaque vérification réelle — tsc/lint/tests automatiques,
+    parcours dans le navigateur, essai sur téléphone — et quand Kevin rapporte
+    un test manuel (« testé sur le téléphone, ça marche », « le tri est encore
+    faux »). Un test raté puis refait réussi = deux appels : l'historique garde
+    les deux. Chaque test est aussi noté au journal du projet."""
+    return repo.add_test(task_id, what, result, environment=environment, detail=detail)
+
+
+@mcp.tool()
+def list_tests(task_id: int) -> list:
+    """Les tests consignés sur une tâche, du plus récent au plus ancien.
+    Pour une vue d'ensemble d'une tâche et de ses sous-tâches, appeler aussi
+    sur chaque sous-tâche (get_task donne leurs numéros)."""
+    return repo.list_tests(task_id)
+
+
+@mcp.tool()
+def add_reminder(project: str, when: str, note: str, task_id: int | None = None) -> dict:
+    """Pose un rappel sur un PROJET (ou, avec `task_id`, sur une de ses tâches).
+    À l'échéance, Kevin reçoit un message Telegram (boutons +1 h / demain /
+    c'est bon), et le rappel apparaît sur la page du projet et dans le briefing.
+
+    Pour ce qui concerne le projet sans tâche précise : « relance le client
+    lundi », « reprendre la montée de version vendredi ». Un projet peut en
+    avoir plusieurs. `note` dit quoi faire à ce moment-là.
+    `when`, à l'heure de Paris : « demain » (9 h), « demain 14h », « ce soir »
+    (18 h), « lundi », « lundi 14:30 », « +2h », « +30min », « 2026-09-27 14:00 ».
+    """
+    moment = rappels.interprete(when)
+    return _rappel_out(repo.add_reminder(_pid(project), rappels.en_utc(moment), note,
+                                         task_id=task_id))
+
+
+@mcp.tool()
+def set_reminder(task_id: int, when: str | None, note: str | None = None) -> dict:
+    """Pose LE rappel d'une tâche — remplace celui qu'elle avait. À utiliser
+    quand Kevin remet une tâche à plus tard (« pas le temps de tester,
+    rappelle-moi demain »). `when` vide ou null retire le rappel de la tâche.
+    Pour un rappel sur le projet lui-même : add_reminder.
+    `when`, à l'heure de Paris : « demain » (9 h), « demain 14h », « ce soir »
+    (18 h), « lundi », « lundi 14:30 », « +2h », « +30min », « 2026-09-27 14:00 ».
+    """
+    if not (when or "").strip():
+        repo.set_task_reminder(task_id, None)
+        return {"task_id": task_id, "removed": True}
+    moment = rappels.interprete(when)
+    return _rappel_out(repo.set_task_reminder(task_id, rappels.en_utc(moment), note))
+
+
+@mcp.tool()
+def list_reminders(project: str | None = None) -> list:
+    """Les rappels posés (échus et à venir), du plus proche au plus lointain :
+    ceux des projets (task_id null) et ceux des tâches."""
+    return [_rappel_out(r) for r in repo.list_reminders(_pid(project) if project else None)]
+
+
+@mcp.tool()
+def update_reminder(reminder_id: int, when: str | None = None, note: str | None = None) -> dict:
+    """Déplace un rappel (il repartira à la nouvelle date) et/ou change sa note.
+    `when`, à l'heure de Paris : « demain » (9 h), « demain 14h », « ce soir »
+    (18 h), « lundi », « lundi 14:30 », « +2h », « +30min », « 2026-09-27 14:00 ».
+    """
+    quand = rappels.en_utc(rappels.interprete(when)) if (when or "").strip() else None
+    return _rappel_out(repo.update_reminder(reminder_id, remind_at=quand, note=note))
+
+
+@mcp.tool()
+def remove_reminder(reminder_id: int) -> dict:
+    """Retire un rappel (fait, ou devenu inutile)."""
+    repo.get_reminder(reminder_id)
+    repo.delete_reminder(reminder_id)
+    return {"removed": reminder_id}
+
 
 @mcp.tool()
 def list_tasks(project: str, status: str | None = None, min_priority: int | None = None,
@@ -503,7 +593,14 @@ def add_memory(title: str, body: str, project: str | None = None, kind: str = "n
                tags: str | None = None, pinned: bool = False) -> dict:
     """Enregistre quelque chose à ne pas réapprendre : une décision d'architecture
     et son pourquoi, une convention du projet, un piège rencontré, un élément de
-    contexte. Types : decision, convention, gotcha, context, note.
+    contexte. Types : decision, convention, gotcha, erreur, context, note.
+
+    `erreur` : une faute que TU as commise et qu'un autre agent pourrait refaire
+    (fausse piste, hypothèse fausse, commande qui a cassé quelque chose, travail
+    refusé). Titre = la règle à suivre (« Toujours … », « Ne jamais … ») ; corps
+    = ce qui s'est passé, ce que ça a coûté, comment l'éviter. Chercher d'abord
+    avec list_memories(kind='erreur') : si elle existe déjà, l'enrichir avec
+    update_memory plutôt que la dupliquer.
 
     Sans `project`, la mémoire est globale (vraie pour tous les projets).
     `pinned=True` la fait apparaître systématiquement en tête du briefing.

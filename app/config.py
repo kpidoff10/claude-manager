@@ -12,6 +12,14 @@ WEB_PASSWORD = os.environ.get("CM_WEB_PASSWORD", "")
 SESSION_SECRET = os.environ.get("CM_SESSION_SECRET", "dev-secret-change-me")
 
 PUBLIC_URL = os.environ.get("CM_PUBLIC_URL", "http://localhost:8099")
+# Résultats possibles d'un test consigné sur une tâche.
+TEST_RESULTS = {"ok": "✅", "ko": "❌", "partial": "◐"}
+TEST_RESULT_ALIASES = {"ok": "ok", "pass": "ok", "passed": "ok", "vert": "ok", "réussi": "ok",
+                       "ko": "ko", "fail": "ko", "failed": "ko", "échec": "ko", "echec": "ko",
+                       "rouge": "ko", "partial": "partial", "partiel": "partial"}
+
+# Fuseau dans lequel « demain 9 h » se comprend et les rappels s'affichent.
+TIMEZONE = os.environ.get("CM_TZ", "Europe/Paris")
 
 
 def _empreinte_statique() -> str:
@@ -70,7 +78,10 @@ MAX_RETRIES = int(os.environ.get("CM_MAX_RETRIES", "3"))
 # trois, la relecture humaine devient le goulot et le risque de collision monte
 # plus vite que le gain de temps.
 MAX_PARALLEL = int(os.environ.get("CM_MAX_PARALLEL", "3"))
-MEMORY_KINDS = ["decision", "convention", "gotcha", "context", "note"]
+# `erreur` : une faute commise par un agent (ou par Claude en session), écrite
+# comme une règle à suivre. Elles ont leur propre section dans le briefing, pour
+# qu'aucune autre mémoire ne les en chasse.
+MEMORY_KINDS = ["decision", "convention", "gotcha", "erreur", "context", "note"]
 # Catégories de la méthodologie d'un projet. Volontairement peu nombreuses : une
 # liste longue se remplit au hasard et ne classe plus rien.
 PRACTICE_CATEGORIES = ["demarrage", "termine", "perimetre", "revue", "tests",

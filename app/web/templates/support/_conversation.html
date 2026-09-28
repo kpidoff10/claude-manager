@@ -1,0 +1,53 @@
+{% set cle, libelle = statut_signaleur(t) %}
+<div class="support-head" data-awaiting="{{ 1 if t.awaiting_ai else 0 }}">
+  <h1>{{ t.title or 'Nouveau signalement' }}</h1>
+  <span class="support-state state-{{ cle }}">{{ libelle }}</span>
+</div>
+
+{% if t.status == 'rejected' and t.reject_reason %}
+<div class="support-note">Réponse de l'équipe : {{ t.reject_reason }}</div>
+{% endif %}
+
+<div class="chat">
+  {% if not messages %}
+  <div class="bubble assistant">Bonjour {{ reporter.name.split(' ')[0] }} ! Quel problème
+    rencontrez-vous sur {{ t.project_name }} ? Dites-moi sur quel écran vous étiez et ce qui s'est passé.</div>
+  {% endif %}
+  {% for m in messages %}
+  <div class="bubble {{ m.role }}">{{ m.content }}</div>
+  {% endfor %}
+  {% if t.awaiting_ai %}
+  <div class="bubble assistant typing">L'assistant {{ t.ai_progress or 'réfléchit' }}…</div>
+  {% elif t.ai_error %}
+  <div class="bubble assistant error">L'assistant n'a pas pu répondre. Renvoyez votre
+    message dans un instant.</div>
+  {% endif %}
+</div>
+
+{% if t.status == 'draft' and t.summary and not t.awaiting_ai %}
+<section class="card ticket-draft">
+  <h2>Ticket proposé</h2>
+  <p><strong>{{ t.title }}</strong></p>
+  {% if t.page %}<p class="muted small">Écran : {{ t.page }}</p>{% endif %}
+  {% if t.duplicate_of %}<p class="muted small">Problème déjà signalé (n° {{ t.duplicate_of }}) : votre ticket le confirme et le complète.</p>{% endif %}
+  <div class="ticket-summary">{{ t.summary }}</div>
+  <form method="post" action="/support/t/{{ t.id }}/submit">
+    <button type="submit" class="primary">Envoyer ce ticket à l'équipe</button>
+  </form>
+  <p class="muted small">Quelque chose ne va pas ? Répondez à l'assistant ci-dessous pour le corriger.</p>
+</section>
+{% endif %}
+
+{% if t.status == 'draft' %}
+  {% if quota_atteint %}
+  <p class="muted">Limite de messages atteinte pour aujourd'hui. Vous pourrez reprendre demain.</p>
+  {% else %}
+  <form class="chat-form" method="post" action="/support/t/{{ t.id }}/message" data-chat-form>
+    <textarea name="content" rows="3" maxlength="4000" required
+              placeholder="Décrivez le problème…" {{ 'disabled' if t.awaiting_ai }}></textarea>
+    <button type="submit" {{ 'disabled' if t.awaiting_ai }}>Envoyer</button>
+  </form>
+  {% endif %}
+{% else %}
+<p class="muted small">Ce signalement a été envoyé. Vous verrez ici son avancement.</p>
+{% endif %}

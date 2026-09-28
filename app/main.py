@@ -1,4 +1,5 @@
 """Point d'entrée : une seule application servant l'interface web et le MCP."""
+import asyncio
 import hmac
 import json
 import logging
@@ -9,23 +10,55 @@ from fastapi import Body, FastAPI, Request
 from fastapi.staticfiles import StaticFiles
 from starlette.responses import JSONResponse, PlainTextResponse
 
-from . import __version__, briefing as briefing_mod, config, db, notify, repo, runlog
+from . import __version__, briefing as briefing_mod, config, db, notify, rappels, repo, runlog
 from .auth import AuthMiddleware
 from .mcp_server import mcp
+from .support_mcp import support_mcp
 from .web.routes import router as web_router
+from .web.support_routes import router as support_router
 
 log = logging.getLogger("claude-manager")
 
 # Construit avant le montage : c'est cet appel qui instancie le gestionnaire de
 # sessions référencé plus bas dans le lifespan.
 mcp_app = mcp.streamable_http_app()
+support_mcp_app = support_mcp.streamable_http_app()
+
+
+RAPPELS_SECONDES = 30
+
+
+def envoie_rappels_echus() -> int:
+    """Envoie les rappels arrivés à échéance. Un envoi raté est retenté au tour
+    suivant ; un envoi réussi (ou sans objet) n'est jamais refait."""
+    envoyes = 0
+    for rappel in repo.due_reminders(rappels.en_utc(rappels.maintenant())):
+        if notify.rappelle(rappel):
+            repo.mark_reminded(rappel["id"])
+            envoyes += 1
+    return envoyes
+
+
+async def _boucle_rappels() -> None:
+    """Une minuterie dans le serveur, pas dans le démon de la file : le démon
+    peut être arrêté, un rappel doit partir quand même."""
+    while True:
+        try:
+            await asyncio.to_thread(envoie_rappels_echus)
+        except Exception:  # noqa: BLE001 — la boucle ne doit jamais mourir
+            log.exception("rappels : tour en échec")
+        await asyncio.sleep(RAPPELS_SECONDES)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     db.init_db()
-    async with mcp.session_manager.run():
-        yield
+    boucle = asyncio.create_task(_boucle_rappels())
+    try:
+        async with mcp.session_manager.run(), support_mcp.session_manager.run():
+            yield
+    finally:
+        boucle.cancel()
 
 
 app = FastAPI(title="claude-manager", version=__version__, lifespan=lifespan,
@@ -33,8 +66,10 @@ app = FastAPI(title="claude-manager", version=__version__, lifespan=lifespan,
 
 app.add_middleware(AuthMiddleware)
 app.mount("/mcp", mcp_app)
+app.mount("/mcp-support", support_mcp_app)
 app.mount("/static", StaticFiles(directory=config.BASE_DIR / "web" / "static"), name="static")
 app.include_router(web_router)
+app.include_router(support_router)
 
 
 @app.get("/api/briefing", response_class=PlainTextResponse)
@@ -148,8 +183,11 @@ def api_queue_claim(payload: dict = Body(...)):
     project = repo.get_project(task["project_id"])
     # Les services voyagent avec : c'est là qu'est le gabarit d'URL de l'aperçu.
     project["services"] = repo.list_services(project["id"])
+    # Les erreurs déjà commises sur ce projet partent avec la tâche : elles
+    # entrent dans le prompt même si le hook SessionStart ne répond pas.
+    erreurs = repo.list_memories(project["id"], kind="erreur", limit=20)
     return {"claimed": True, "run": run, "task": task, "project": project,
-            "commands": repo.list_commands(project["id"])}
+            "commands": repo.list_commands(project["id"]), "erreurs": erreurs}
 
 
 @app.post("/api/runs/{run_id}/finish")
@@ -160,7 +198,8 @@ def api_run_finish(run_id: int, payload: dict = Body(...)):
     champs = {key: payload.get(key) for key in
               ("commit_after", "diff_stat", "tests_command", "tests_ok", "tests_output",
                "summary", "exit_code", "log_path", "foreign_files", "collision",
-               "branch", "base_branch", "worktree", "preview_url", "preview_port")}
+               "branch", "base_branch", "worktree", "preview_url", "preview_port",
+               "lesson_note")}
     run = repo.finish_run(run_id, status=payload.get("status", "error"),
                           task_status=payload.get("task_status", "review"), **champs)
     task = repo.get_task(run["task_id"])
@@ -199,6 +238,49 @@ def _previens_fin(run: dict, task: dict) -> None:
         lignes,
         notify.lien_run(run["id"]),
     )
+
+
+@app.get("/api/support/pending")
+def api_support_pending():
+    """Discussions de signalement qui attendent la réponse de l'IA (démon).
+
+    Chacune porte son jeton d'accès au MCP support, borné à ce signalement."""
+    from .support_mcp import jeton
+    tickets = repo.pending_ai()
+    for t in tickets:
+        t["mcp_token"] = jeton(t["id"])
+    return {"tickets": tickets}
+
+
+@app.post("/api/support/{ticket_id}/reply")
+def api_support_reply(ticket_id: int, payload: dict = Body(...)):
+    repo.save_ai_reply(ticket_id, payload.get("content"), draft=payload.get("draft"),
+                       error=payload.get("error"), session=payload.get("session"))
+    return {"ok": True}
+
+
+@app.post("/api/support/{ticket_id}/progress")
+def api_support_progress(ticket_id: int, payload: dict = Body(...)):
+    repo.set_ai_progress(ticket_id, payload.get("text"))
+    return {"ok": True}
+
+
+@app.post("/api/support/{ticket_id}/warm")
+def api_support_warm(ticket_id: int, payload: dict = Body(...)):
+    repo.save_warmup(ticket_id, payload.get("session"), bool(payload.get("ok")))
+    return {"ok": True}
+
+
+@app.get("/api/lessons/pending")
+def api_lessons_pending():
+    """Exécutions ratées dont il reste à tirer la leçon (voir repo._flag_lesson)."""
+    return {"lessons": repo.pending_lessons()}
+
+
+@app.post("/api/lessons/{run_id}/result")
+def api_lesson_result(run_id: int, payload: dict = Body(...)):
+    repo.set_lesson_result(run_id, payload.get("state", "done"))
+    return {"ok": True}
 
 
 @app.get("/api/doc-edits/pending")
@@ -320,8 +402,11 @@ def _traite_telegram(update: dict) -> None:
         chat = str(((rappel.get("message") or {}).get("chat") or {}).get("id", ""))
         if chat != attendu:
             return
-        notify.appel("answerCallbackQuery", {"callback_query_id": rappel.get("id")})
         morceaux = str(rappel.get("data", "")).split(":")
+        if len(morceaux) == 3 and morceaux[0] == "rp":
+            _bouton_rappel(rappel.get("id"), int(morceaux[1]), morceaux[2])
+            return
+        notify.appel("answerCallbackQuery", {"callback_query_id": rappel.get("id")})
         if len(morceaux) != 3 or morceaux[0] != "r":
             return
         task_id, index = int(morceaux[1]), int(morceaux[2])
@@ -359,6 +444,24 @@ def _traite_telegram(update: dict) -> None:
                              "ou commence par son numéro : « #42 ta réponse »."])
             return
     _enregistre_reponse(task_id, texte)
+
+
+def _bouton_rappel(callback_id, reminder_id: int, action: str) -> None:
+    """Les trois boutons d'un rappel : repousser d'une heure, à demain matin,
+    ou le retirer. La confirmation s'affiche en bulle, sans nouveau message."""
+    try:
+        rappel = repo.get_reminder(reminder_id)
+        sujet = f"#{rappel['task_id']}" if rappel.get("task_id") else rappel["project_name"]
+        if action == "ok":
+            repo.delete_reminder(reminder_id)
+            texte = f"Rappel retiré ✓ ({sujet})"
+        else:
+            quand = rappels.en_utc(rappels.interprete("+1h" if action == "1h" else "demain"))
+            repo.update_reminder(reminder_id, remind_at=quand)
+            texte = f"{sujet} : rappel {rappels.libelle(quand)}"
+    except repo.NotFound:
+        texte = "Ce rappel n'existe plus."
+    notify.appel("answerCallbackQuery", {"callback_query_id": callback_id, "text": texte})
 
 
 def _enregistre_reponse(task_id: int, reponse: str) -> None:

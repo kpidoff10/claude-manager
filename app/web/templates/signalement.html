@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}Signalement n° {{ t.id }} — claude-manager{% endblock %}
+{% block content %}
+{% set cle, libelle = statut_signaleur(t) %}
+<p><a href="/signalements">← Signalements</a></p>
+<header class="page-head">
+  <div class="head-main">
+    <h1>{{ t.title or 'Signalement n° ' ~ t.id }}</h1>
+    <p class="muted">{{ t.reporter_name }}{% if t.reporter_agency %} ({{ t.reporter_agency }}){% endif %}
+      · {{ t.project_name }} · <span class="support-state state-{{ cle }}">{{ libelle }}</span>
+      {% if t.task_id %} · <a href="/task/{{ t.task_id }}" data-task-dialog>tâche #{{ t.task_id }}</a>{% endif %}</p>
+  </div>
+</header>
+
+{% if t.summary %}
+<section class="card ticket-draft">
+  <h2>Ticket</h2>
+  {% if t.page %}<p class="muted small">Écran : {{ t.page }}</p>{% endif %}
+  {% if t.severity %}<p class="muted small">Gravité ressentie : {{ t.severity }}</p>{% endif %}
+  {% if t.duplicate_of %}<p class="tag req">Doublon probable du <a href="/signalements/{{ t.duplicate_of }}">signalement n° {{ t.duplicate_of }}</a></p>{% endif %}
+  <div class="ticket-summary">{{ t.summary }}</div>
+</section>
+{% endif %}
+
+{% if t.status == 'submitted' %}
+<section class="card">
+  <h2>Décision</h2>
+  <form class="grid-form" method="post" action="/signalements/{{ t.id }}/accept">
+    <label class="wide">Consigne pour l'agent (facultatif)
+      <input name="note" placeholder="Ex. : regarder d'abord le composant X ; ne pas toucher au schéma"></label>
+    <label>Priorité
+      <select name="priority">{% for v, n in priorities.items() %}<option value="{{ v }}" {{ 'selected' if v == 2 }}>{{ n }}</option>{% endfor %}</select>
+    </label>
+    <label class="check"><input type="checkbox" name="queue" value="1"> Mettre directement en file d'agents</label>
+    <button type="submit">✓ Valider → créer la tâche</button>
+  </form>
+  <form class="grid-form" method="post" action="/signalements/{{ t.id }}/reject">
+    <label class="wide">Raison du refus (visible par le signaleur)
+      <input name="reason" required placeholder="Ex. : comportement normal — la fiche se met à jour au rechargement"></label>
+    <button type="submit" class="danger">Refuser</button>
+  </form>
+</section>
+{% elif t.status == 'rejected' %}
+<p class="muted">Refusé : {{ t.reject_reason }}</p>
+{% endif %}
+
+<h2>Discussion</h2>
+<div class="chat">
+  {% for m in messages %}
+  <div class="bubble {{ m.role }}"><span class="muted small">{{ 'Signaleur' if m.role == 'user' else 'IA' }} · {{ m.created_at[11:16] }}</span>
+{{ m.content }}</div>
+  {% else %}<p class="muted">Aucun message.</p>{% endfor %}
+</div>
+{% endblock %}

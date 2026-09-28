@@ -5,14 +5,16 @@ Les hooks tournent sur l'hôte, hors du conteneur : ils lisent le token dans
 échouer une session — toutes les erreurs sont avalées.
 """
 import json
+import os
 import urllib.error
 import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
-MANAGER_DIR = Path("/home/dev/projects/claude-manager")
-BASE_URL = "http://127.0.0.1:8099"
+# Déduit de l'emplacement du fichier : le dépôt peut être cloné n'importe où.
+MANAGER_DIR = Path(__file__).resolve().parent.parent
+BASE_URL = os.environ.get("CM_BASE_URL", "http://127.0.0.1:8099")
 STATE_DIR = Path.home() / ".cache" / "claude-manager" / "sessions"
 TIMEOUT = 6
 

@@ -15,7 +15,7 @@ from fastapi.templating import Jinja2Templates
 
 from markupsafe import Markup
 
-from .. import (auth, briefing as briefing_mod, config, db, gitinfo, markup,
+from .. import (auth, briefing as briefing_mod, config, db, gitinfo, markup, rappels,
                 notify, repo, runlog, scanner)
 
 router = APIRouter()
@@ -24,11 +24,22 @@ templates = Jinja2Templates(directory=config.BASE_DIR / "web" / "templates")
 # n'émet qu'une liste close de balises : `markupsafe.Markup` est donc sûr ici,
 # et seulement ici. Ne jamais l'appliquer à du texte non passé par markup.rendu.
 templates.env.filters["markdown"] = lambda texte: Markup(markup.rendu(texte or ""))
+templates.env.filters["rappel"] = rappels.libelle
+templates.env.filters["rappel_echu"] = rappels.echu
+templates.env.tests["rappel_echu"] = rappels.echu
+templates.env.filters["rappel_champ"] = rappels.valeur_champ
+templates.env.globals["rappel_raccourcis"] = rappels.RACCOURCIS
+templates.env.globals["test_results"] = config.TEST_RESULTS
 templates.env.filters["markdown_ligne"] = lambda texte: Markup(markup.en_ligne(texte or ""))
 # Même garantie : les cases cliquables sont posées par markup.rendu, après échappement.
 templates.env.filters["markdown_taches"] = lambda texte, slug, task_id, view: Markup(markup.rendu(
     texte or "", cases={"action": f"/p/{slug}/tasks/{task_id}/check",
                         "champs": {"tab": "tasks", "view": view}}))
+# Les mêmes cases dans la fiche (boîte de dialogue) : le clic réaffiche la fiche.
+templates.env.filters["markdown_fiche"] = lambda texte, slug, task_id: Markup(markup.rendu(
+    texte or "", cases={"action": f"/p/{slug}/tasks/{task_id}/check",
+                        "champs": {"tab": "tasks", "retour": "fiche"},
+                        "cible": "task-dialog-body"}))
 # Suffixe d'URL des fichiers statiques : il change à chaque déploiement et
 # force le navigateur à redemander la feuille de style. Voir config.
 templates.env.globals["static_v"] = config.STATIC_VERSION
@@ -87,8 +98,13 @@ def _panel_context(request: Request, project: dict, tab: str, view: str = "liste
         # ouverte sous une tâche terminée ne doit pas disparaître de la vue.
         by_id = {t["id"]: t for t in tasks}
         subtasks: dict[int, list] = {}
+        rappels_taches = repo.reminders_by_task(pid)
+        tests = repo.tests_for_project(pid)
         for task in tasks:
+            task["tests"] = tests.get(task["id"], [])
+            task["tests_summary"] = repo.summarise_tests(task["tests"])
             task["checks"] = markup.compter_cases(task.get("body"))
+            task["reminder"] = rappels_taches.get(task["id"])
             parent = by_id.get(task.get("parent_id"))
             task["nested"] = bool(parent and parent["status"] not in ("done", "cancelled"))
             if parent:
@@ -302,6 +318,30 @@ def project_live(request: Request, slug: str):
     return JSONResponse({"version": repo.project_version(project["id"]), "activity": html})
 
 
+@router.get("/task/{task_id}", response_class=HTMLResponse)
+def task_card(request: Request, task_id: int):
+    """Fiche d'une tâche : dans la boîte de dialogue ouverte d'un clic sur
+    « ↳ #N », ou en page entière si le JavaScript ne charge pas."""
+    try:
+        task = repo.get_task(task_id)
+    except repo.NotFound:
+        raise HTTPException(status_code=404, detail=f"tâche #{task_id} introuvable")
+    project = repo.get_project(task["project_id"])
+    task["checks"] = markup.compter_cases(task.get("body"))
+    task["reminders"] = repo.list_reminders(task_id=task_id)
+    task["tests"] = repo.list_tests(task_id)
+    task["tests_summary"] = repo.summarise_tests(task["tests"])
+    for s in task.get("subtasks") or []:
+        s["tests_summary"] = repo.summarise_tests(repo.list_tests(s["id"]))
+    ctx = {"t": task, "project": project,
+           "milestone": next((m for m in repo.list_milestones(project["id"])
+                              if m["id"] == task.get("milestone_id")), None)}
+    if _is_ajax(request):
+        return templates.TemplateResponse(request, "partials/task_card.html", ctx)
+    ctx.update({"projects": repo.list_projects()})
+    return templates.TemplateResponse(request, "task.html", ctx)
+
+
 @router.get("/p/{slug}/briefing.md", response_class=PlainTextResponse)
 def project_briefing(slug: str):
     """Le briefing tel que Claude le reçoit — pratique pour vérifier ce qu'il voit."""
@@ -326,6 +366,7 @@ def project_tab(request: Request, slug: str, tab: str):
     ctx.update({"projects": repo.list_projects(), "tabs": TABS,
                 "tab_label": dict(TABS).get(tab, tab),
                 "live_version": repo.project_version(project["id"]),
+                "project_reminders": repo.list_reminders(project["id"]),
                 **_activity_context(project)})
     return templates.TemplateResponse(request, "project.html", ctx)
 
@@ -382,6 +423,112 @@ async def edit_task(request: Request, slug: str, task_id: int):
     return _respond(request, slug, "tasks", form)
 
 
+@router.post("/p/{slug}/tasks/{task_id}/remind")
+async def remind_task(request: Request, slug: str, task_id: int):
+    """Pose, déplace ou retire le rappel d'une tâche. `quand` vient d'un
+    raccourci (« demain ») ou du champ date-heure ; « retirer » l'efface."""
+    form = await request.form()
+    if _clean(form.get("retirer")):
+        repo.set_task_reminder(task_id, None)
+    else:
+        quand = _quand(form)
+        if quand:
+            repo.set_task_reminder(task_id, quand, _clean(form.get("note")))
+    return _respond(request, slug, "tasks", form)
+
+
+def _quand(form) -> str | None:
+    """La date d'un formulaire de rappel, en UTC : un raccourci (« demain »)
+    ou le champ date-heure. None si rien de compréhensible."""
+    texte = _clean(form.get("quand")) or _clean(form.get("quand_precis"))
+    if not texte:
+        return None
+    try:
+        return rappels.en_utc(rappels.interprete(texte))
+    except rappels.DateIncomprise:
+        return None
+
+
+# --------------------------------------------------------------------------
+# Rappels de projet
+# --------------------------------------------------------------------------
+
+def _reminders_fragment(request: Request, project: dict) -> HTMLResponse:
+    return templates.TemplateResponse(request, "partials/project_reminders.html", {
+        "project": project, "project_reminders": repo.list_reminders(project["id"])})
+
+
+def _reminders_block(request: Request, project: dict):
+    """Le bloc « Rappels » d'un projet : fragment pour le JavaScript, retour
+    à la page sinon."""
+    if _is_ajax(request):
+        return _reminders_fragment(request, project)
+    return RedirectResponse(request.headers.get("referer") or f"/p/{project['slug']}/tasks",
+                            status_code=303)
+
+
+@router.get("/p/{slug}/reminders", response_class=HTMLResponse)
+def project_reminders(request: Request, slug: str):
+    return _reminders_fragment(request, repo.require_project(slug))
+
+
+@router.post("/p/{slug}/reminders/new")
+async def project_reminder_new(request: Request, slug: str):
+    form = await request.form()
+    project = repo.require_project(slug)
+    quand = _quand(form)
+    if quand:
+        repo.add_reminder(project["id"], quand, _clean(form.get("note")))
+    return _reminders_block(request, project)
+
+
+@router.post("/p/{slug}/reminders/{reminder_id}/snooze")
+async def project_reminder_snooze(request: Request, slug: str, reminder_id: int):
+    form = await request.form()
+    quand = _quand(form)
+    if quand:
+        repo.update_reminder(reminder_id, remind_at=quand)
+    return _reminders_block(request, repo.require_project(slug))
+
+
+@router.post("/p/{slug}/reminders/{reminder_id}/delete")
+async def project_reminder_delete(request: Request, slug: str, reminder_id: int):
+    repo.delete_reminder(reminder_id)
+    return _reminders_block(request, repo.require_project(slug))
+
+
+def _after_test(request: Request, slug: str, form, task_id: int):
+    """Depuis la fiche (boîte de dialogue), on renvoie la fiche ; depuis la
+    liste, le panneau."""
+    if _clean(form.get("retour")) == "fiche":
+        if _is_ajax(request):
+            return task_card(request, task_id)
+        # Sans JavaScript, la fiche est une page entière : on y revient.
+        return RedirectResponse(f"/task/{task_id}", status_code=303)
+    return _respond(request, slug, "tasks", form)
+
+
+@router.post("/p/{slug}/tasks/{task_id}/tests")
+async def add_task_test(request: Request, slug: str, task_id: int):
+    form = await request.form()
+    what = _clean(form.get("what"))
+    if what and _clean(form.get("result")):
+        try:
+            repo.add_test(task_id, what, _clean(form.get("result")),
+                          environment=_clean(form.get("environment")),
+                          detail=_clean(form.get("detail")), actor="user")
+        except ValueError:
+            pass
+    return _after_test(request, slug, form, task_id)
+
+
+@router.post("/p/{slug}/tasks/{task_id}/tests/{test_id}/delete")
+async def delete_task_test(request: Request, slug: str, task_id: int, test_id: int):
+    form = await request.form()
+    repo.delete_test(test_id)
+    return _after_test(request, slug, form, task_id)
+
+
 @router.post("/p/{slug}/tasks/{task_id}/check")
 async def check_task_item(request: Request, slug: str, task_id: int):
     """Coche ou décoche une case `- [ ]` de la description d'une tâche."""
@@ -391,7 +538,7 @@ async def check_task_item(request: Request, slug: str, task_id: int):
                                 _clean(form.get("empreinte")))
     if body is not None:
         repo.update_task(task_id, body=body)
-    return _respond(request, slug, "tasks", form)
+    return _after_test(request, slug, form, task_id)
 
 
 @router.post("/p/{slug}/tasks/{task_id}/delete")
@@ -877,6 +1024,59 @@ async def set_preference(request: Request):
     slug = _clean(form.get("slug"))
     return _respond(request, slug, "stack") if slug \
         else RedirectResponse("/preferences", status_code=303)
+
+
+# --------------------------------------------------------------------------
+# Tous les rappels
+# --------------------------------------------------------------------------
+
+def _rappels_context() -> dict:
+    groupes = {cle: [] for cle, _ in rappels.GROUPES}
+    for r in repo.list_reminders():
+        groupes[rappels.groupe(r["remind_at"])].append(r)
+    return {"groupes": [(cle, label, groupes[cle]) for cle, label in rappels.GROUPES],
+            "total": sum(len(v) for v in groupes.values()),
+            "all_projects": repo.list_projects()}
+
+
+def _rappels_respond(request: Request):
+    if _is_ajax(request):
+        return templates.TemplateResponse(request, "partials/all_reminders.html", _rappels_context())
+    return RedirectResponse("/rappels", status_code=303)
+
+
+@router.get("/rappels", response_class=HTMLResponse)
+def reminders_page(request: Request):
+    if _is_ajax(request):
+        return templates.TemplateResponse(request, "partials/all_reminders.html", _rappels_context())
+    ctx = _rappels_context()
+    ctx.update({"page": "rappels", "page_label": "Rappels", "projects": ctx["all_projects"]})
+    return templates.TemplateResponse(request, "reminders.html", ctx)
+
+
+@router.post("/rappels/new")
+async def reminders_new(request: Request):
+    form = await request.form()
+    projet = repo.get_project(_clean(form.get("project")))
+    quand = _quand(form)
+    if projet and quand:
+        repo.add_reminder(projet["id"], quand, _clean(form.get("note")))
+    return _rappels_respond(request)
+
+
+@router.post("/rappels/{reminder_id}/snooze")
+async def reminders_snooze(request: Request, reminder_id: int):
+    form = await request.form()
+    quand = _quand(form)
+    if quand:
+        repo.update_reminder(reminder_id, remind_at=quand)
+    return _rappels_respond(request)
+
+
+@router.post("/rappels/{reminder_id}/delete")
+async def reminders_delete(request: Request, reminder_id: int):
+    repo.delete_reminder(reminder_id)
+    return _rappels_respond(request)
 
 
 @router.get("/preferences", response_class=HTMLResponse)

@@ -1,0 +1,46 @@
+{# Fiche d'une tâche : boîte de dialogue ou page entière. On y consigne les tests. #}
+{% import "partials/_tests.html" as tt %}
+<article class="task-card">
+  <header class="task-card-head">
+    <div class="task-card-meta">
+      <span class="tag status-{{ t.status }}">{{ t.status }}</span>
+      {% if t.priority != 2 %}<span class="prio p{{ t.priority }}">{{ t.priority_label }}</span>{% endif %}
+      {% if t.owner != 'claude' %}<span class="tag owner">{{ t.owner }}</span>{% endif %}
+      {% if t.parent_id %}<a class="tag parent-link" href="/task/{{ t.parent_id }}" data-task-dialog
+         title="Ouvrir la tâche parente">↳ #{{ t.parent_id }}</a>{% endif %}
+      {% for tag in t.tags %}<span class="tag">#{{ tag }}</span>{% endfor %}
+      <span class="muted small">#{{ t.id }} · {{ project.name }}</span>
+    </div>
+    <h2 class="task-card-title">{{ t.title }}</h2>
+    {% if milestone %}<div class="muted small">Jalon : {{ milestone.name }}</div>{% endif %}
+    {% for r in t.reminders or [] %}<div class="task-card-note reminder {{ 'due' if r.remind_at|rappel_echu }}">⏰ Rappel {{ r.remind_at|rappel }}{% if r.note %} — {{ r.note }}{% endif %}</div>{% endfor %}
+    {% if t.status == 'cancelled' and t.cancel_reason %}<div class="task-card-note">✗ Abandonnée : {{ t.cancel_reason }}</div>{% endif %}
+    {% if t.blocked_reason %}<div class="task-card-note blocked">{{ t.blocked_reason }}</div>{% endif %}
+  </header>
+
+  {% if t.body %}<div class="md task-md">{{ t.body|markdown_fiche(project.slug, t.id) }}</div>{% endif %}
+
+  {% if t.subtasks %}
+    {% set closed = t.subtasks|selectattr('status', 'in', ['done', 'cancelled'])|list|length %}
+    <h3 class="task-card-sub">Sous-tâches <span class="count">{{ closed }}/{{ t.subtasks|length }}</span></h3>
+    <ul class="checklist-read">
+      {% for s in t.subtasks %}
+        {% set fermee = s.status in ('done', 'cancelled') %}
+        <li class="{{ 'closed' if fermee }}">
+          <span class="md-box">{{ '☑' if fermee else '☐' }}</span>
+          <a href="/task/{{ s.id }}" data-task-dialog class="check-title">{{ s.title }}</a>
+          {{ tt.badge(s.tests_summary) }}
+          {% if s.status not in ('todo', 'done') %}<span class="tag status-{{ s.status }}">{{ s.status }}</span>{% endif %}
+          {% if s.status == 'cancelled' and s.cancel_reason %}<span class="check-reason">{{ s.cancel_reason }}</span>{% endif %}
+        </li>
+      {% endfor %}
+    </ul>
+  {% endif %}
+
+  {{ tt.block(project, t, t.tests or [], 'liste', true) }}
+
+  <footer class="task-card-foot">
+    <a class="btn ghost small" href="/p/{{ project.slug }}/tasks">Voir dans {{ project.name }}</a>
+    <span class="muted small">mise à jour {{ t.updated_at[:16]|replace('T', ' ') }}</span>
+  </footer>
+</article>

@@ -24,8 +24,18 @@
     <a class="nav-item {% if page == 'search' %}active{% endif %}" href="/search">
       <span class="ico">⌕</span> Recherche
     </a>
+    {% set rappels_echus = (projects|default([]))|sum(attribute='reminders_due') %}
+    <a class="nav-item {% if page == 'rappels' %}active{% endif %}" href="/rappels">
+      <span class="ico">⏰</span> Rappels
+      {% if rappels_echus %}<span class="sig reminder-sig" title="Rappels arrivés à échéance">{{ rappels_echus }}</span>{% endif %}
+    </a>
     <a class="nav-item {% if page == 'preferences' %}active{% endif %}" href="/preferences">
       <span class="ico">★</span> Préférences techniques
+    </a>
+    {% set signalements_attente = signalements_en_attente() %}
+    <a class="nav-item {% if page == 'signalements' %}active{% endif %}" href="/signalements">
+      <span class="ico">🛟</span> Signalements
+      {% if signalements_attente %}<span class="sig awaiting" title="Signalements à valider">{{ signalements_attente }}</span>{% endif %}
     </a>
     <a class="nav-item {% if page == 'reglages' %}active{% endif %}" href="/reglages">
       <span class="ico">🔔</span> Notifications
@@ -49,6 +59,9 @@
           <span class="sig recent" title="Écriture sur ce projet il y a moins de 15 minutes">
             actif
           </span>
+        {% endif %}
+        {% if p.reminders_due %}
+          <span class="sig reminder-sig" title="Rappel arrivé à échéance">⏰ {{ p.reminders_due }}</span>
         {% endif %}
         {% if p.tasks_awaiting %}
           <span class="sig awaiting" title="À vérifier ou en attente de ta décision">
@@ -97,6 +110,13 @@
     {% block content %}{% endblock %}
   </main>
 </div>
+
+<datalist id="test-envs"><option value="dev"><option value="prod"><option value="téléphone"><option value="navigateur"><option value="tablette"></datalist>
+
+<dialog id="task-dialog" class="task-dialog" aria-label="Détail de la tâche">
+  <button type="button" class="icon-btn task-dialog-close" data-dialog-close aria-label="Fermer">✕</button>
+  <div data-dialog-body id="task-dialog-body"></div>
+</dialog>
 
 <script src="/static/app.js?v={{ static_v }}"></script>
 </body>

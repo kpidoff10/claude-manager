@@ -20,8 +20,10 @@
 </form>
 {% endmacro %}
 
+{% import "partials/_tests.html" as tt %}
 {% macro badges(t, subs=none) %}
 <span class="meta">
+  {{ tt.badge(t.tests_summary) }}
   {% if subs %}
     {% set closed = subs|selectattr('status', 'in', ['done', 'cancelled'])|list|length %}
     <span class="tag checklist-count {{ 'complete' if closed == subs|length }}"
@@ -30,10 +32,13 @@
     <span class="tag checklist-count {{ 'complete' if t.checks[0] == t.checks[1] }}"
           title="Cases cochées dans la description">☑ {{ t.checks[0] }}/{{ t.checks[1] }}</span>
   {% endif %}
-  {% if t.parent_id and not t.nested %}<span class="tag" title="Sous-tâche">↳ #{{ t.parent_id }}</span>{% endif %}
+  {% if t.parent_id and not t.nested %}<a class="tag parent-link" href="/task/{{ t.parent_id }}" data-task-dialog
+     title="Ouvrir la tâche parente">↳ #{{ t.parent_id }}</a>{% endif %}
   {% if t.priority >= 3 %}<span class="prio p{{ t.priority }}">{{ t.priority_label }}</span>{% endif %}
   {% if t.owner != 'claude' %}<span class="tag owner">{{ t.owner }}</span>{% endif %}
   {% for tag in t.tags %}<span class="tag">#{{ tag }}</span>{% endfor %}
+  {% if t.reminder %}<span class="tag reminder {{ 'due' if t.reminder.remind_at|rappel_echu }}"
+     title="{{ t.reminder.note or 'Rappel' }}">⏰ {{ t.reminder.remind_at|rappel }}</span>{% endif %}
   {% if t.status == 'cancelled' and t.cancel_reason %}<span class="tag cancel-reason" title="Raison de l'abandon">✗ {{ t.cancel_reason }}</span>{% endif %}
   {% if t.blocked_reason %}<span class="tag blocked">{{ t.blocked_reason }}</span>{% endif %}
   <span class="muted small">#{{ t.id }}</span>

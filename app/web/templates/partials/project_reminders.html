@@ -1,0 +1,52 @@
+{# Rappels d'un projet : ceux du projet lui-même et ceux de ses tâches.
+   Rechargé seul (data-target) : agir ici ne recharge pas l'onglet en cours. #}
+{% set due = project_reminders|selectattr('remind_at', 'rappel_echu')|list %}
+<details class="project-reminders" {% if due %}open{% endif %}>
+  <summary class="btn ghost small">
+    ⏰ Rappels{% if project_reminders %} <span class="count">{{ project_reminders|length }}</span>{% endif %}
+    {% if due %}<span class="tag reminder due">{{ due|length }} échu{{ 's' if due|length > 1 }}</span>{% endif %}
+  </summary>
+
+  {% if project_reminders %}
+  <ul class="reminder-list">
+    {% for r in project_reminders %}
+    {% set echu = r.remind_at|rappel_echu %}
+    <li class="reminder-item {{ 'due' if echu }}">
+      <span class="tag reminder {{ 'due' if echu }}">⏰ {{ r.remind_at|rappel }}</span>
+      <span class="reminder-text">
+        {% if r.task_id %}<a href="/task/{{ r.task_id }}" data-task-dialog class="tag parent-link">#{{ r.task_id }}</a>{% endif %}
+        {{ r.note or r.task_title or 'Rappel' }}
+      </span>
+      <span class="reminder-actions">
+        {% for valeur, label in [('+1h', '+1 h'), ('demain', 'Demain')] %}
+        <form class="panel-form inline" method="post" data-target="project-reminders"
+              action="/p/{{ project.slug }}/reminders/{{ r.id }}/snooze">
+          <input type="hidden" name="quand" value="{{ valeur }}">
+          <button type="submit" class="ghost small">{{ label }}</button>
+        </form>
+        {% endfor %}
+        <form class="panel-form inline" method="post" data-target="project-reminders"
+              action="/p/{{ project.slug }}/reminders/{{ r.id }}/delete">
+          <button type="submit" class="ghost small" title="Retirer le rappel" aria-label="Retirer">✓</button>
+        </form>
+      </span>
+    </li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+
+  <form class="panel-form reminder-form" method="post" data-target="project-reminders"
+        action="/p/{{ project.slug }}/reminders/new">
+    <input name="note" placeholder="Rappel sur le projet — ex. relancer le client" aria-label="Note du rappel"
+           class="reminder-note" required>
+    <div class="reminder-quick">
+      {% for valeur, label in rappel_raccourcis %}
+        <button type="submit" name="quand" value="{{ valeur }}" class="ghost small">{{ label }}</button>
+      {% endfor %}
+    </div>
+    <div class="reminder-precise">
+      <input type="datetime-local" name="quand_precis" aria-label="Date et heure précises">
+      <button type="submit" class="small">Poser</button>
+    </div>
+  </form>
+</details>

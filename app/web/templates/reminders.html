@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}Rappels — claude-manager{% endblock %}
+{% block content %}
+<header class="page-head">
+  <div class="head-main">
+    <h1>⏰ Rappels</h1>
+    <p class="muted">Tous les rappels, projets et tâches confondus, du plus urgent au plus lointain.</p>
+  </div>
+</header>
+<div id="all-reminders" data-all-reminders>
+  {% include "partials/all_reminders.html" %}
+</div>
+{% endblock %}

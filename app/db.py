@@ -41,6 +41,27 @@ MIGRATIONS = [
     ("runs", "preview_port", "INTEGER"),
     ("projects", "tags", "TEXT NOT NULL DEFAULT '[]'"),
     ("tasks", "cancel_reason", "TEXT"),
+    ("tasks", "remind_at", "TEXT"),
+    ("tasks", "remind_note", "TEXT"),
+    ("tasks", "reminded_at", "TEXT"),
+    ("runs", "lesson_state", "TEXT"),
+    ("runs", "lesson_note", "TEXT"),
+    # Fiche support : le SEUL contexte projet donné à l'IA qui parle aux
+    # signaleurs. Jamais la mémoire, le journal ni le briefing.
+    ("projects", "support_context", "TEXT"),
+    ("support_tickets", "duplicate_of", "INTEGER"),
+    # Session `claude` de la conversation : elle dure autant que la discussion
+    # (--session-id au premier message, --resume ensuite).
+    ("support_tickets", "ai_session", "TEXT"),
+    # Code lu par l'IA support : une copie en lecture seule, tenue par le démon
+    # à partir de ce dépôt (clé de déploiement sans droit d'écriture).
+    ("projects", "support_git", "TEXT"),
+    ("projects", "support_branch", "TEXT"),
+    # Session préparée dès l'ouverture de la discussion, pendant que le
+    # signaleur lit l'accueil : pending → done | failed.
+    ("support_tickets", "warm_state", "TEXT"),
+    # Ce que fait l'IA pendant que le signaleur attend (« consulte le code… »).
+    ("support_tickets", "ai_progress", "TEXT"),
 ]
 
 
@@ -51,12 +72,36 @@ def _apply_migrations(conn) -> None:
             conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
 
 
+def _reprend_rappels(conn) -> None:
+    """Les premiers rappels vivaient dans des colonnes de `tasks`. On les
+    recopie dans `reminders` puis on vide les colonnes : relancé, ce code ne
+    trouve plus rien à reprendre."""
+    lignes = conn.execute("SELECT id, project_id, remind_at, remind_note, reminded_at"
+                          " FROM tasks WHERE remind_at IS NOT NULL").fetchall()
+    for r in lignes:
+        conn.execute("INSERT INTO reminders (project_id, task_id, note, remind_at, reminded_at,"
+                     " created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                     (r["project_id"], r["id"], r["remind_note"], r["remind_at"],
+                      r["reminded_at"], now(), now()))
+        conn.execute("UPDATE tasks SET remind_at = NULL, remind_note = NULL,"
+                     " reminded_at = NULL WHERE id = ?", (r["id"],))
+
+
+def _reprend_projets_signaleurs(conn) -> None:
+    """Un signaleur n'avait qu'un projet : il le garde dans la table de liaison.
+    Idempotent — relancé à chaque démarrage, il ne trouve plus rien à faire."""
+    conn.execute("INSERT OR IGNORE INTO reporter_projects (reporter_id, project_id)"
+                 " SELECT id, project_id FROM reporters")
+
+
 def init_db() -> None:
     global _initialised
     schema = (config.BASE_DIR / "schema.sql").read_text(encoding="utf-8")
     with connect() as conn:
         conn.executescript(schema)
         _apply_migrations(conn)
+        _reprend_rappels(conn)
+        _reprend_projets_signaleurs(conn)
         conn.commit()
     _initialised = True
 
