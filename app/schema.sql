@@ -333,6 +333,26 @@ CREATE TABLE IF NOT EXISTS support_messages (
 );
 CREATE INDEX IF NOT EXISTS idx_support_messages ON support_messages(ticket_id, id);
 
+-- Captures d'écran des signalements. Trois sources :
+--   user      jointe par le signaleur à un message
+--   reference déposée par Kevin sur la fiche support d'un projet (avec légende)
+--   ai        une capture de référence que l'IA montre au signaleur
+-- Les fichiers vivent sous DATA_DIR/support-files ; `stored` est relatif.
+CREATE TABLE IF NOT EXISTS support_files (
+    id         INTEGER PRIMARY KEY,
+    source     TEXT NOT NULL,
+    project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    ticket_id  INTEGER REFERENCES support_tickets(id) ON DELETE CASCADE,
+    message_id INTEGER REFERENCES support_messages(id) ON DELETE CASCADE,
+    filename   TEXT NOT NULL,
+    mime       TEXT NOT NULL,
+    size       INTEGER NOT NULL,
+    stored     TEXT NOT NULL,
+    caption    TEXT,
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_support_files_ticket ON support_files(ticket_id, message_id);
+
 -- Index de recherche plein texte, alimenté par repo.py (pas par des triggers :
 -- une seule voie d'écriture, plus simple à garder cohérente).
 CREATE VIRTUAL TABLE IF NOT EXISTS search_index USING fts5(

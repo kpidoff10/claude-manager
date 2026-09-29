@@ -17,9 +17,9 @@ outil ne prend de projet en paramètre.
 import hashlib
 import hmac
 
-from mcp.server.fastmcp import Context, FastMCP
+from mcp.server.fastmcp import Context, FastMCP, Image
 
-from . import config, repo
+from . import captures, config, repo
 
 support_mcp = FastMCP("support", stateless_http=True)
 support_mcp.settings.streamable_http_path = "/"
@@ -93,3 +93,40 @@ def etat_signalement(ctx: Context, numero: int) -> dict:
         return {"numero": numero, "etat": "inconnu"}
     return {"numero": t["id"], "titre": t.get("title"), "ecran": t.get("page"),
             "etat": "refusé" if t["status"] == "rejected" else _etat(t)}
+
+
+FORMATS = {"image/png": "png", "image/jpeg": "jpeg", "image/gif": "gif", "image/webp": "webp"}
+
+
+@support_mcp.tool()
+def captures_reference(ctx: Context) -> list[dict]:
+    """Captures d'écran de référence du logiciel, déposées par l'équipe : numéro
+    et légende (ce que montre la capture). À montrer au signaleur quand ça
+    l'aide — « voici où se trouve ce bouton »."""
+    ticket = _ticket(ctx)
+    return [{"numero": f["id"], "legende": f["caption"] or f["filename"]}
+            for f in repo.reference_files(ticket["project_id"])]
+
+
+@support_mcp.tool()
+def voir_capture_reference(ctx: Context, numero: int) -> Image:
+    """Affiche une capture de référence, pour vérifier qu'elle montre bien ce
+    que tu veux montrer avant de l'envoyer."""
+    ticket = _ticket(ctx)
+    f = repo.get_support_file(int(numero))
+    if not f or f["source"] != "reference" or f["project_id"] != ticket["project_id"]:
+        raise ValueError("capture de référence inconnue")
+    p = captures.chemin(f)
+    if p is None:
+        raise ValueError("capture introuvable")
+    return Image(data=p.read_bytes(), format=FORMATS.get(f["mime"], "png"))
+
+
+@support_mcp.tool()
+def montrer_capture(ctx: Context, numero: int) -> str:
+    """Joint une capture de référence à ta prochaine réponse : le signaleur la
+    verra sous ton message. Une ou deux au plus, seulement si elle l'aide."""
+    ticket = _ticket(ctx)
+    if repo.show_reference(ticket["id"], int(numero)) is None:
+        return "Capture inconnue : rien ne sera montré."
+    return "D'accord : la capture sera affichée sous ta réponse."

@@ -16,9 +16,9 @@ import secrets
 import time
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 
-from .. import auth, config, notify, repo
+from .. import auth, captures, config, notify, repo
 from .routes import _clean, _int, _is_ajax, templates
 
 router = APIRouter()
@@ -159,7 +159,8 @@ async def support_new(request: Request):
 
 
 def _ticket_ctx(reporter: dict, ticket: dict) -> dict:
-    return {"reporter": reporter, "t": ticket, "messages": repo.ticket_messages(ticket["id"]),
+    return {"reporter": reporter, "t": ticket,
+            "messages": repo.ticket_messages_with_files(ticket["id"]),
             "quota_atteint": repo.user_messages_today(reporter["id"])
                              >= repo.SUPPORT_MAX_MESSAGES_PAR_JOUR}
 
@@ -178,14 +179,38 @@ async def support_message(request: Request, ticket_id: int):
     ticket = _son_ticket(reporter, ticket_id)
     form = await request.form()
     texte = (_clean(form.get("content")) or "")[:MESSAGE_MAX]
-    if (texte and ticket["status"] == "draft" and not ticket["awaiting_ai"]
+    lues = await captures.lis_tous(form.getlist("captures"))
+    if ((texte or lues) and ticket["status"] == "draft" and not ticket["awaiting_ai"]
             and ticket["messages"] < MESSAGES_PAR_TICKET
             and repo.user_messages_today(reporter["id"]) < repo.SUPPORT_MAX_MESSAGES_PAR_JOUR):
-        repo.add_user_message(ticket_id, texte)
+        message_id = repo.add_user_message(ticket_id, texte or "(capture d'écran)")
+        captures.joins(lues, ticket, message_id)
     if _is_ajax(request):
         return templates.TemplateResponse(request, "support/_conversation.html",
                                           _ticket_ctx(reporter, repo.get_ticket(ticket_id)))
     return RedirectResponse(f"/support/t/{ticket_id}", status_code=303)
+
+
+def _sert(fichier: dict | None):
+    p = captures.chemin(fichier) if fichier else None
+    if p is None:
+        raise HTTPException(status_code=404, detail="capture introuvable")
+    # nosniff : le navigateur s'en tient au type reconnu au dépôt.
+    return FileResponse(p, media_type=fichier["mime"],
+                        headers={"X-Content-Type-Options": "nosniff",
+                                 "Cache-Control": "private, max-age=86400",
+                                 "Content-Disposition": "inline"})
+
+
+@router.get("/support/capture/{file_id}")
+def support_capture(request: Request, file_id: int):
+    """Une capture d'un de SES signalements (jointe par lui ou montrée par l'IA)."""
+    reporter = _signaleur(request)
+    fichier = repo.get_support_file(file_id)
+    if not fichier or not fichier["ticket_id"]:
+        raise HTTPException(status_code=404, detail="capture introuvable")
+    _son_ticket(reporter, fichier["ticket_id"])
+    return _sert(fichier)
 
 
 @router.post("/support/t/{ticket_id}/submit")
@@ -235,7 +260,7 @@ def signalement(request: Request, ticket_id: int):
     if not ticket:
         raise HTTPException(status_code=404, detail="signalement introuvable")
     return templates.TemplateResponse(request, "signalement.html", _admin_ctx(
-        t=ticket, messages=repo.ticket_messages(ticket_id),
+        t=ticket, messages=repo.ticket_messages_with_files(ticket_id),
         priorities=config.PRIORITIES))
 
 
@@ -333,10 +358,38 @@ def reporter_reset(reporter_id: int):
                             status_code=303)
 
 
+@router.get("/signalements/capture/{file_id}")
+def admin_capture(file_id: int):
+    return _sert(repo.get_support_file(file_id))
+
+
 @router.get("/signalements/fiche/{slug}", response_class=HTMLResponse)
 def fiche_support(request: Request, slug: str):
     project = repo.require_project(slug)
-    return templates.TemplateResponse(request, "fiche_support.html", _admin_ctx(project=project))
+    return templates.TemplateResponse(request, "fiche_support.html", _admin_ctx(
+        project=project, references=repo.reference_files(project["id"])))
+
+
+@router.post("/signalements/fiche/{slug}/captures")
+async def fiche_capture_ajout(request: Request, slug: str):
+    """Captures de référence : ce que l'IA peut MONTRER au signaleur (« voici
+    où se trouve le bouton »). Chacune avec une légende, que l'IA lit."""
+    project = repo.require_project(slug)
+    form = await request.form()
+    legende = _clean(form.get("caption"))
+    for donnees, mime, ext, nom in await captures.lis_tous(form.getlist("captures")):
+        stored = captures.range_(donnees, ext, f"references/{project['slug']}")
+        repo.add_support_file("reference", project["id"], nom, mime, len(donnees), stored,
+                              caption=legende or nom)
+    return RedirectResponse(f"/signalements/fiche/{slug}#captures", status_code=303)
+
+
+@router.post("/signalements/fiche/{slug}/captures/{file_id}/delete")
+def fiche_capture_retrait(slug: str, file_id: int):
+    fichier = repo.get_support_file(file_id)
+    if fichier and fichier["source"] == "reference":
+        captures.efface(repo.delete_support_file(file_id))
+    return RedirectResponse(f"/signalements/fiche/{slug}#captures", status_code=303)
 
 
 @router.post("/signalements/fiche/{slug}")

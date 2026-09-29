@@ -14,7 +14,11 @@
     rencontrez-vous sur {{ t.project_name }} ? Dites-moi sur quel écran vous étiez et ce qui s'est passé.</div>
   {% endif %}
   {% for m in messages %}
-  <div class="bubble {{ m.role }}">{{ m.content }}</div>
+  <div class="bubble {{ m.role }}">{% if not (m.files and m.content == "(capture d'écran)") %}{{ m.content }}{% endif %}
+    {%- for f in m.files %}<a class="bubble-img" href="/support/capture/{{ f.id }}" target="_blank" rel="noopener">
+      <img src="/support/capture/{{ f.id }}" alt="{{ f.caption or f.filename }}" loading="lazy"></a>
+      {% if f.caption and m.role != 'user' %}<span class="bubble-caption">{{ f.caption }}</span>{% endif %}{% endfor -%}
+  </div>
   {% endfor %}
   {% if t.awaiting_ai %}
   <div class="bubble assistant typing">L'assistant {{ t.ai_progress or 'réfléchit' }}…</div>
@@ -42,10 +46,16 @@
   {% if quota_atteint %}
   <p class="muted">Limite de messages atteinte pour aujourd'hui. Vous pourrez reprendre demain.</p>
   {% else %}
-  <form class="chat-form" method="post" action="/support/t/{{ t.id }}/message" data-chat-form>
-    <textarea name="content" rows="3" maxlength="4000" required
-              placeholder="Décrivez le problème…" {{ 'disabled' if t.awaiting_ai }}></textarea>
-    <button type="submit" {{ 'disabled' if t.awaiting_ai }}>Envoyer</button>
+  <form class="chat-form" method="post" action="/support/t/{{ t.id }}/message"
+        enctype="multipart/form-data" data-chat-form>
+    <textarea name="content" rows="3" maxlength="4000"
+              placeholder="Décrivez le problème… (Ctrl+V pour coller une capture)" {{ 'disabled' if t.awaiting_ai }}></textarea>
+    <div class="chat-actions">
+      <label class="btn ghost chat-file" title="Joindre une capture d'écran">📎 Capture
+        <input type="file" name="captures" accept="image/png,image/jpeg,image/gif,image/webp" multiple hidden {{ 'disabled' if t.awaiting_ai }}></label>
+      <span class="muted small" data-chat-files></span>
+      <button type="submit" {{ 'disabled' if t.awaiting_ai }}>Envoyer</button>
+    </div>
   </form>
   {% endif %}
 {% else %}

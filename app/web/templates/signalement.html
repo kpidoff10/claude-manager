@@ -48,7 +48,7 @@
 <div class="chat">
   {% for m in messages %}
   <div class="bubble {{ m.role }}"><span class="muted small">{{ 'Signaleur' if m.role == 'user' else 'IA' }} · {{ m.created_at[11:16] }}</span>
-{{ m.content }}</div>
+{{ m.content }}{% for f in m.files %}<a class="bubble-img" href="/signalements/capture/{{ f.id }}" target="_blank" rel="noopener"><img src="/signalements/capture/{{ f.id }}" alt="{{ f.caption or f.filename }}" loading="lazy"></a>{% endfor %}</div>
   {% else %}<p class="muted">Aucun message.</p>{% endfor %}
 </div>
 {% endblock %}

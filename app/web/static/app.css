@@ -1095,3 +1095,11 @@ code.secret-once { font-size: 15px; padding: 2px 8px; user-select: all; }
   border: 0; padding: 0; margin: 0; }
 .reporter-projects legend { padding: 0; margin-bottom: 4px; }
 .panel-section { margin-bottom: 22px; }
+.bubble-img { display: block; margin-top: 8px; }
+.bubble-img img { max-width: 100%; max-height: 320px; border-radius: 8px; border: 1px solid var(--border); display: block; }
+.bubble-caption { display: block; font-size: 12px; color: var(--muted); margin-top: 4px; }
+.chat-actions { display: flex; align-items: center; gap: 10px; width: 100%; justify-content: flex-end; flex-wrap: wrap; }
+.chat-file { cursor: pointer; margin-right: auto; }
+.reference-list { list-style: none; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
+.reference-list li { display: flex; flex-direction: column; gap: 6px; background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 8px; font-size: 13px; }
+.reference-list img { width: 100%; height: 120px; object-fit: cover; object-position: top; border-radius: 6px; }

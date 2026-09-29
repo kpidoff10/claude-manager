@@ -259,6 +259,18 @@ def api_support_reply(ticket_id: int, payload: dict = Body(...)):
     return {"ok": True}
 
 
+@app.get("/api/support/capture/{file_id}")
+def api_support_capture(file_id: int):
+    """Une capture, pour le démon qui la dépose à portée de l'IA support."""
+    from fastapi.responses import FileResponse
+    from . import captures
+    fichier = repo.get_support_file(file_id)
+    p = captures.chemin(fichier) if fichier else None
+    if p is None:
+        return JSONResponse({"error": "capture introuvable"}, status_code=404)
+    return FileResponse(p, media_type=fichier["mime"])
+
+
 @app.post("/api/support/{ticket_id}/progress")
 def api_support_progress(ticket_id: int, payload: dict = Body(...)):
     repo.set_ai_progress(ticket_id, payload.get("text"))

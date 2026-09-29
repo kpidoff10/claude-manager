@@ -269,6 +269,7 @@ Outside users (e.g. branch offices) file tickets by chatting with an AI on
 - **Accounts**: name, login, allowed projects; generated password, shown once.
 - **Support sheet** per project: what the AI knows about the software, written for an end user. And, so it can read the code, the SSH repository and branch.
 - **Approval**: every submitted ticket waits for your decision. Approving creates a task (queued or not); rejecting requires a reason, visible to the user.
+- **Screenshots**: users attach or paste (Ctrl+V) screenshots in the chat; the AI looks at them and can ask for one. On the support sheet you can upload **reference screenshots** with a caption, which the AI can show to users ("the button is here"). Your sessions and agents read a ticket's screenshots through the `get_signalement_capture` MCP tool. Only PNG, JPEG, GIF and WebP are accepted, detected from the file content (no SVG), 8 MB max.
 
 **Reading the code**: the daemon keeps a copy of the repository in
 `~/.cache/claude-manager/support-code/` with a dedicated key, **without write

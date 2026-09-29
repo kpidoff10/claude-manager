@@ -25,4 +25,26 @@
   <textarea name="support_context" rows="24" placeholder="## Écrans principaux&#10;- Projets : …&#10;&#10;## Problèmes connus&#10;- …">{{ project.support_context or '' }}</textarea>
   <button type="submit">Enregistrer</button>
 </form>
+
+<h2 id="captures">Captures de référence</h2>
+<p class="muted small">Des captures du logiciel que l'IA peut <strong>montrer</strong> au signaleur
+  (« voici où se trouve le bouton »). La légende est ce que l'IA lit pour choisir : décris l'écran
+  et ce qu'on y voit. Aucune donnée client réelle à l'écran.</p>
+{% if references %}
+<ul class="reference-list">
+  {% for f in references %}
+  <li>
+    <a href="/signalements/capture/{{ f.id }}" target="_blank" rel="noopener"><img src="/signalements/capture/{{ f.id }}" alt="" loading="lazy"></a>
+    <span>n° {{ f.id }} — {{ f.caption or f.filename }}</span>
+    <form method="post" action="/signalements/fiche/{{ project.slug }}/captures/{{ f.id }}/delete"
+          onsubmit="return confirm('Retirer cette capture ?')"><button type="submit" class="small danger">Retirer</button></form>
+  </li>
+  {% endfor %}
+</ul>
+{% endif %}
+<form class="grid-form card" method="post" action="/signalements/fiche/{{ project.slug }}/captures" enctype="multipart/form-data">
+  <label class="wide">Légende <input name="caption" required placeholder="Fiche projet, onglet Suivi : la grille des étapes et le bouton Enregistrer en bas à droite"></label>
+  <label class="wide">Image(s) <input type="file" name="captures" accept="image/png,image/jpeg,image/gif,image/webp" multiple required></label>
+  <button type="submit">Ajouter</button>
+</form>
 {% endblock %}
