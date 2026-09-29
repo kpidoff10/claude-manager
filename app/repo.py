@@ -540,6 +540,7 @@ def get_task(conn, task_id: int) -> dict:
     task = task_out(row)
     task["subtasks"] = [task_out(r) for r in conn.execute(
         "SELECT * FROM tasks WHERE parent_id = ? ORDER BY order_index, id", (task_id,))]
+    task["files"] = task_files(task_id, conn=conn)
     return task
 
 
@@ -2108,17 +2109,63 @@ def reference_files(conn, project_id: int) -> list[dict]:
         " ORDER BY id", (project_id,))]
 
 
+def _fichier_encore_utilise(conn, stored: str) -> bool:
+    return bool(_count(conn, "SELECT COUNT(*) FROM support_files WHERE stored = ?", (stored,))
+                or _count(conn, "SELECT COUNT(*) FROM task_files WHERE stored = ?", (stored,)))
+
+
 @_with_conn
 def delete_support_file(conn, file_id: int) -> str | None:
     """Supprime la ligne. Renvoie le fichier à effacer du disque, ou None s'il
     sert encore : une capture de référence déjà montrée dans une discussion
-    reste visible dans cette discussion."""
+    reste visible dans cette discussion, une pièce passée à une tâche y reste."""
     row = conn.execute("SELECT stored FROM support_files WHERE id = ?", (file_id,)).fetchone()
     if row is None:
         return None
     conn.execute("DELETE FROM support_files WHERE id = ?", (file_id,))
-    encore = _count(conn, "SELECT COUNT(*) FROM support_files WHERE stored = ?", (row["stored"],))
-    return None if encore else row["stored"]
+    return None if _fichier_encore_utilise(conn, row["stored"]) else row["stored"]
+
+
+def task_file_out(conn, row) -> dict:
+    d = dict(row)
+    d["chemin_hote"] = str(Path(config.HOST_DATA_DIR) / "support-files" / d["stored"]) \
+        if config.HOST_DATA_DIR else None
+    return d
+
+
+@_with_conn
+def add_task_file(conn, task_id: int, filename: str, mime: str, size: int, stored: str,
+                  actor: str = "user", caption: str | None = None) -> dict:
+    t = conn.execute("SELECT project_id FROM tasks WHERE id = ?", (task_id,)).fetchone()
+    if t is None:
+        raise NotFound(f"tâche introuvable : {task_id}")
+    cur = conn.execute(
+        "INSERT INTO task_files (task_id, project_id, filename, mime, size, stored, caption,"
+        " actor, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (task_id, t["project_id"], filename, mime, size, stored, caption, actor, now()))
+    conn.execute("UPDATE tasks SET updated_at = ? WHERE id = ?", (now(), task_id))
+    return get_task_file(cur.lastrowid, conn=conn)
+
+
+@_with_conn
+def get_task_file(conn, file_id: int) -> dict | None:
+    row = conn.execute("SELECT * FROM task_files WHERE id = ?", (file_id,)).fetchone()
+    return task_file_out(conn, row) if row else None
+
+
+@_with_conn
+def task_files(conn, task_id: int) -> list[dict]:
+    return [task_file_out(conn, r) for r in conn.execute(
+        "SELECT * FROM task_files WHERE task_id = ? ORDER BY id", (task_id,))]
+
+
+@_with_conn
+def delete_task_file(conn, file_id: int) -> str | None:
+    row = conn.execute("SELECT stored FROM task_files WHERE id = ?", (file_id,)).fetchone()
+    if row is None:
+        return None
+    conn.execute("DELETE FROM task_files WHERE id = ?", (file_id,))
+    return None if _fichier_encore_utilise(conn, row["stored"]) else row["stored"]
 
 
 @_with_conn
@@ -2275,6 +2322,11 @@ def accept_ticket(conn, ticket_id: int, queue: bool = False, priority: int = 2,
                        status="queued" if queue else "todo", tags=["support"], conn=conn)
     conn.execute("UPDATE support_tickets SET status = 'accepted', task_id = ?, updated_at = ?"
                  " WHERE id = ?", (task["id"], now(), ticket_id))
+    # Les pièces du signaleur passent à la tâche : l'agent les trouvera là.
+    for f in conn.execute("SELECT * FROM support_files WHERE ticket_id = ? AND source = 'user'"
+                          " ORDER BY id", (ticket_id,)).fetchall():
+        add_task_file(task["id"], f["filename"], f["mime"], f["size"], f["stored"],
+                      actor="signaleur", caption=f"Signalement #{ticket_id}", conn=conn)
     log_work(t["project_id"], kind="note", actor="user", task_id=task["id"],
              summary=f"Signalement #{t['id']} de {t['reporter_name']} validé → tâche #{task['id']}"
                      + (" (mise en file)" if queue else ""), conn=conn)

@@ -353,6 +353,23 @@ CREATE TABLE IF NOT EXISTS support_files (
 );
 CREATE INDEX IF NOT EXISTS idx_support_files_ticket ON support_files(ticket_id, message_id);
 
+-- Pièces jointes des tâches (captures, zip, PDF, maquettes…). Même stockage
+-- et mêmes contrôles que les signalements (app/captures.py). Un signalement
+-- validé transmet les siennes à la tâche créée : même fichier, deux lignes.
+CREATE TABLE IF NOT EXISTS task_files (
+    id         INTEGER PRIMARY KEY,
+    task_id    INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+    project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    filename   TEXT NOT NULL,
+    mime       TEXT NOT NULL,
+    size       INTEGER NOT NULL,
+    stored     TEXT NOT NULL,
+    caption    TEXT,
+    actor      TEXT NOT NULL DEFAULT 'user',
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_task_files_task ON task_files(task_id, id);
+
 -- Index de recherche plein texte, alimenté par repo.py (pas par des triggers :
 -- une seule voie d'écriture, plus simple à garder cohérente).
 CREATE VIRTUAL TABLE IF NOT EXISTS search_index USING fts5(

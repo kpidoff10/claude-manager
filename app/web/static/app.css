@@ -1107,3 +1107,9 @@ code.secret-once { font-size: 15px; padding: 2px 8px; user-select: all; }
   border: 1px solid var(--border); border-radius: 8px; background: var(--panel); color: var(--text);
   text-decoration: none; overflow-wrap: anywhere; }
 .bubble-file:hover { border-color: var(--accent); }
+.task-files { margin: 14px 0; }
+.task-file-list { list-style: none; padding: 0; margin: 0 0 8px; display: flex; flex-direction: column; gap: 6px; }
+.task-file-list li { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.task-file-thumb img { height: 64px; max-width: 160px; object-fit: cover; object-position: top; border-radius: 6px; border: 1px solid var(--border); display: block; }
+.task-file-form { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.task-file-form input[type=file] { max-width: 100%; }

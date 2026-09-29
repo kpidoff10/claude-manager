@@ -538,6 +538,31 @@ async def delete_task_test(request: Request, slug: str, task_id: int, test_id: i
     return _after_test(request, slug, form, task_id)
 
 
+@router.post("/p/{slug}/tasks/{task_id}/files")
+async def add_task_files(request: Request, slug: str, task_id: int):
+    """Captures et fichiers joints à une tâche, depuis sa fiche."""
+    from .. import captures
+    form = await request.form()
+    captures.joins_tache(await captures.lis_tous(form.getlist("fichiers")), task_id)
+    return _after_test(request, slug, form, task_id)
+
+
+@router.post("/p/{slug}/tasks/{task_id}/files/{file_id}/delete")
+async def delete_task_file(request: Request, slug: str, task_id: int, file_id: int):
+    from .. import captures
+    form = await request.form()
+    fichier = repo.get_task_file(file_id)
+    if fichier and fichier["task_id"] == task_id:
+        captures.efface(repo.delete_task_file(file_id))
+    return _after_test(request, slug, form, task_id)
+
+
+@router.get("/task-file/{file_id}")
+def task_file(file_id: int):
+    from .. import captures
+    return captures.reponse(repo.get_task_file(file_id))
+
+
 @router.post("/p/{slug}/tasks/{task_id}/check")
 async def check_task_item(request: Request, slug: str, task_id: int):
     """Coche ou décoche une case `- [ ]` de la description d'une tâche."""

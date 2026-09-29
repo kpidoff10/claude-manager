@@ -195,18 +195,8 @@ async def support_message(request: Request, ticket_id: int):
 
 
 def _sert(fichier: dict | None):
-    p = captures.chemin(fichier) if fichier else None
-    if p is None:
-        raise HTTPException(status_code=404, detail="pièce jointe introuvable")
-    entetes = {"X-Content-Type-Options": "nosniff", "Cache-Control": "private, max-age=86400"}
-    if captures.est_image(fichier):
-        # nosniff : le navigateur s'en tient au type reconnu au dépôt.
-        return FileResponse(p, media_type=fichier["mime"],
-                            headers={**entetes, "Content-Disposition": "inline"})
-    # Tout le reste se télécharge, sans jamais s'ouvrir dans la page : un
-    # fichier d'inconnu ne s'exécute pas sur notre domaine.
-    return FileResponse(p, media_type="application/octet-stream", filename=fichier["filename"],
-                        headers=entetes)
+    # Image affichée (nosniff), tout le reste en téléchargement : voir captures.
+    return captures.reponse(fichier)
 
 
 @router.get("/support/capture/{file_id}")

@@ -37,6 +37,33 @@
     </ul>
   {% endif %}
 
+  <section class="task-files">
+    <h3 class="task-card-sub">Pièces jointes {% if t.files %}<span class="count">{{ t.files|length }}</span>{% endif %}</h3>
+    {% if t.files %}
+    <ul class="task-file-list">
+      {% for f in t.files %}
+      <li>
+        {% if est_image(f) %}<a href="/task-file/{{ f.id }}" target="_blank" rel="noopener" class="task-file-thumb"><img src="/task-file/{{ f.id }}" alt="{{ f.filename }}" loading="lazy"></a>
+        {% else %}<a class="bubble-file" href="/task-file/{{ f.id }}" download>📦 {{ f.filename }} <span class="muted small">{{ taille_lisible(f.size) }}</span></a>{% endif %}
+        <span class="muted small">{{ f.caption or ('par ' ~ f.actor) }}</span>
+        <form class="panel-form inline" method="post" data-target="task-dialog-body"
+              action="/p/{{ project.slug }}/tasks/{{ t.id }}/files/{{ f.id }}/delete" data-confirm="Retirer « {{ f.filename }} » ?">
+          <input type="hidden" name="retour" value="fiche"><input type="hidden" name="tab" value="tasks">
+          <button type="submit" class="check-remove" aria-label="Retirer" title="Retirer">×</button>
+        </form>
+      </li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+    <form class="panel-form task-file-form" method="post" data-target="task-dialog-body" enctype="multipart/form-data"
+          action="/p/{{ project.slug }}/tasks/{{ t.id }}/files">
+      <input type="hidden" name="retour" value="fiche"><input type="hidden" name="tab" value="tasks">
+      <input type="file" name="fichiers" accept="{{ pieces_acceptees }}" multiple required>
+      <button type="submit" class="small">📎 Joindre</button>
+      <span class="muted small">Captures, zip, PDF, maquettes… 25 Mo par fichier. L'agent qui traite la tâche les reçoit.</span>
+    </form>
+  </section>
+
   {{ tt.block(project, t, t.tests or [], 'liste', true) }}
 
   <footer class="task-card-foot">

@@ -24,7 +24,7 @@ The web interface and the agent prompts are in French.
 | Area | Content |
 |---|---|
 | **Projects** | slug, path on disk, repository, status, computed progress |
-| **Tasks** | priority, status, owner, tags, subtasks, checkboxes, manual tests, reminders |
+| **Tasks** | priority, status, owner, tags, subtasks, checkboxes, manual tests, reminders, attachments (screenshots, zip, PDF, mockups — handed to the agent that works on the task) |
 | **Memory** | decisions, conventions, pitfalls, **mistakes not to repeat** — injected into every briefing |
 | **Stack** | technologies, versions, role, abandoned options and why |
 | **Log** | timestamped record of what was done |

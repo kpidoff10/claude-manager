@@ -191,3 +191,33 @@ def joins(lues, ticket: dict, message_id: int) -> int:
         volume += len(donnees)
         gardees += 1
     return gardees
+
+
+def joins_tache(lues, task_id: int, actor: str = "user") -> int:
+    """Range des pièces lues sur une tâche, dans les mêmes limites qu'un ticket."""
+    existantes = repo.task_files(task_id)
+    nombre, volume = len(existantes), sum(f["size"] for f in existantes)
+    gardees = 0
+    for donnees, mime, ext, nom in lues:
+        if nombre + gardees >= PAR_TICKET or volume + len(donnees) > TICKET_MAX:
+            break
+        stored = range_(donnees, ext, f"taches/{task_id}")
+        repo.add_task_file(task_id, nom, mime, len(donnees), stored, actor=actor)
+        volume += len(donnees)
+        gardees += 1
+    return gardees
+
+
+def reponse(fichier: dict | None):
+    """Réponse HTTP pour une pièce : image affichée, tout le reste téléchargé."""
+    from fastapi import HTTPException
+    from fastapi.responses import FileResponse
+    p = chemin(fichier) if fichier else None
+    if p is None:
+        raise HTTPException(status_code=404, detail="pièce jointe introuvable")
+    entetes = {"X-Content-Type-Options": "nosniff", "Cache-Control": "private, max-age=86400"}
+    if est_image(fichier):
+        return FileResponse(p, media_type=fichier["mime"],
+                            headers={**entetes, "Content-Disposition": "inline"})
+    return FileResponse(p, media_type="application/octet-stream", filename=fichier["filename"],
+                        headers=entetes)
