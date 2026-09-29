@@ -1103,3 +1103,7 @@ code.secret-once { font-size: 15px; padding: 2px 8px; user-select: all; }
 .reference-list { list-style: none; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
 .reference-list li { display: flex; flex-direction: column; gap: 6px; background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 8px; font-size: 13px; }
 .reference-list img { width: 100%; height: 120px; object-fit: cover; object-position: top; border-radius: 6px; }
+.bubble-file { display: inline-flex; gap: 6px; align-items: baseline; margin-top: 8px; padding: 6px 10px;
+  border: 1px solid var(--border); border-radius: 8px; background: var(--panel); color: var(--text);
+  text-decoration: none; overflow-wrap: anywhere; }
+.bubble-file:hover { border-color: var(--accent); }

@@ -48,6 +48,9 @@ def statut_signaleur(t: dict) -> tuple[str, str]:
 templates.env.globals["statut_signaleur"] = statut_signaleur
 templates.env.globals["signalements_en_attente"] = lambda: repo.count_submitted_tickets()
 templates.env.globals["public_url"] = config.PUBLIC_URL.rstrip("/")
+templates.env.globals["est_image"] = captures.est_image
+templates.env.globals["taille_lisible"] = captures.taille_lisible
+templates.env.globals["pieces_acceptees"] = captures.ACCEPTE
 
 
 # --------------------------------------------------------------------------
@@ -183,7 +186,7 @@ async def support_message(request: Request, ticket_id: int):
     if ((texte or lues) and ticket["status"] == "draft" and not ticket["awaiting_ai"]
             and ticket["messages"] < MESSAGES_PAR_TICKET
             and repo.user_messages_today(reporter["id"]) < repo.SUPPORT_MAX_MESSAGES_PAR_JOUR):
-        message_id = repo.add_user_message(ticket_id, texte or "(capture d'écran)")
+        message_id = repo.add_user_message(ticket_id, texte or "(pièce jointe)")
         captures.joins(lues, ticket, message_id)
     if _is_ajax(request):
         return templates.TemplateResponse(request, "support/_conversation.html",
@@ -194,12 +197,16 @@ async def support_message(request: Request, ticket_id: int):
 def _sert(fichier: dict | None):
     p = captures.chemin(fichier) if fichier else None
     if p is None:
-        raise HTTPException(status_code=404, detail="capture introuvable")
-    # nosniff : le navigateur s'en tient au type reconnu au dépôt.
-    return FileResponse(p, media_type=fichier["mime"],
-                        headers={"X-Content-Type-Options": "nosniff",
-                                 "Cache-Control": "private, max-age=86400",
-                                 "Content-Disposition": "inline"})
+        raise HTTPException(status_code=404, detail="pièce jointe introuvable")
+    entetes = {"X-Content-Type-Options": "nosniff", "Cache-Control": "private, max-age=86400"}
+    if captures.est_image(fichier):
+        # nosniff : le navigateur s'en tient au type reconnu au dépôt.
+        return FileResponse(p, media_type=fichier["mime"],
+                            headers={**entetes, "Content-Disposition": "inline"})
+    # Tout le reste se télécharge, sans jamais s'ouvrir dans la page : un
+    # fichier d'inconnu ne s'exécute pas sur notre domaine.
+    return FileResponse(p, media_type="application/octet-stream", filename=fichier["filename"],
+                        headers=entetes)
 
 
 @router.get("/support/capture/{file_id}")
@@ -377,7 +384,8 @@ async def fiche_capture_ajout(request: Request, slug: str):
     project = repo.require_project(slug)
     form = await request.form()
     legende = _clean(form.get("caption"))
-    for donnees, mime, ext, nom in await captures.lis_tous(form.getlist("captures")):
+    for donnees, mime, ext, nom in await captures.lis_tous(form.getlist("captures"),
+                                                            images_seules=True):
         stored = captures.range_(donnees, ext, f"references/{project['slug']}")
         repo.add_support_file("reference", project["id"], nom, mime, len(donnees), stored,
                               caption=legende or nom)

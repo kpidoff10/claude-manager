@@ -35,7 +35,7 @@
     const etiquette = form.querySelector('[data-chat-files]');
     const montre = () => {
       const n = fichiers ? fichiers.files.length : 0;
-      if (etiquette) etiquette.textContent = n ? `${n} capture${n > 1 ? 's' : ''} jointe${n > 1 ? 's' : ''}` : '';
+      if (etiquette) etiquette.textContent = n ? [...fichiers.files].map((f) => f.name).join(', ') : '';
     };
     if (fichiers) fichiers.addEventListener('change', montre);
     // Ctrl+V d'une image : elle rejoint les fichiers du formulaire.
@@ -65,7 +65,7 @@
         const bulle = document.createElement('div');
         bulle.className = 'bubble user';
         const n = fichiers ? fichiers.files.length : 0;
-        bulle.textContent = texte + (n ? `${texte ? '\n' : ''}📎 ${n} capture${n > 1 ? 's' : ''}` : '');
+        bulle.textContent = texte + (n ? `${texte ? '\n' : ''}📎 ${[...fichiers.files].map((f) => f.name).join(', ')}` : '');
         chat.appendChild(bulle);
         bas();
       }

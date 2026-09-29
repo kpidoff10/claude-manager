@@ -74,6 +74,11 @@ RUN_LOG_DIR = os.environ.get("CM_RUN_LOG_DIR",
 # Nombre de renvois en file après un refus ou des tests rouges, avant de laisser
 # la tâche à l'humain. Évite qu'un agent boucle indéfiniment sur le même mur.
 MAX_RETRIES = int(os.environ.get("CM_MAX_RETRIES", "3"))
+
+# Le dossier de données vu depuis l'HÔTE, où tournent les agents : c'est là
+# qu'ils ouvrent les pièces jointes des signalements. Par défaut, déduit du
+# dossier des journaux (<dépôt>/logs/runs → <dépôt>/data).
+HOST_DATA_DIR = os.environ.get("CM_HOST_DATA_DIR") or str(Path(RUN_LOG_DIR).parent.parent / "data")
 # Nombre maximal d'agents simultanés, tous projets confondus. Au-delà de deux ou
 # trois, la relecture humaine devient le goulot et le risque de collision monte
 # plus vite que le gain de temps.
