@@ -13,10 +13,12 @@ SESSION_SECRET = os.environ.get("CM_SESSION_SECRET", "dev-secret-change-me")
 
 PUBLIC_URL = os.environ.get("CM_PUBLIC_URL", "http://localhost:8099")
 # Résultats possibles d'un test consigné sur une tâche.
-TEST_RESULTS = {"ok": "✅", "ko": "❌", "partial": "◐"}
+TEST_RESULTS = {"ok": "✅", "ko": "❌", "partial": "◐", "todo": "⏳"}
 TEST_RESULT_ALIASES = {"ok": "ok", "pass": "ok", "passed": "ok", "vert": "ok", "réussi": "ok",
                        "ko": "ko", "fail": "ko", "failed": "ko", "échec": "ko", "echec": "ko",
-                       "rouge": "ko", "partial": "partial", "partiel": "partial"}
+                       "rouge": "ko", "partial": "partial", "partiel": "partial",
+                       "todo": "todo", "à faire": "todo", "a faire": "todo",
+                       "à tester": "todo", "a tester": "todo", "prévu": "todo"}
 
 # Fuseau dans lequel « demain 9 h » se comprend et les rappels s'affichent.
 TIMEZONE = os.environ.get("CM_TZ", "Europe/Paris")

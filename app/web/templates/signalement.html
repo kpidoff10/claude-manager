@@ -19,6 +19,9 @@
   {% if t.severity %}<p class="muted small">Gravité ressentie : {{ t.severity }}</p>{% endif %}
   {% if t.duplicate_of %}<p class="tag req">Doublon probable du <a href="/signalements/{{ t.duplicate_of }}">signalement n° {{ t.duplicate_of }}</a></p>{% endif %}
   <div class="ticket-summary">{{ t.summary }}</div>
+  {% set verifs = ticket_checks(t) %}
+  {% if verifs %}<p class="muted small"><strong>Vérifications proposées (deviendront des tests « à tester par toi ») :</strong></p>
+  <ul class="ticket-checks">{% for v in verifs %}<li>{{ v }}</li>{% endfor %}</ul>{% endif %}
 </section>
 {% endif %}
 

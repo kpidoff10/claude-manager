@@ -1248,14 +1248,22 @@ def reminders_by_task(conn, project_id: int) -> dict[int, dict]:
 def _result_in(value: str) -> str:
     result = config.TEST_RESULT_ALIASES.get(str(value or "").strip().lower())
     if result is None:
-        raise ValueError(f"résultat inconnu : {value!r} (ok, ko ou partial)")
+        raise ValueError(f"résultat inconnu : {value!r} (ok, ko, partial ou todo)")
     return result
 
 
 @_with_conn
 def add_test(conn, task_id: int, what: str, result: str, environment: str | None = None,
-             detail: str | None = None, actor: str = "claude") -> dict:
-    """Consigne un test fait sur une tâche, et le note au journal du projet."""
+             detail: str | None = None, actor: str = "claude", evidence: str | None = None,
+             owner: str | None = None) -> dict:
+    """Consigne un test sur une tâche.
+
+    `result = todo` : un point du PLAN, pas encore vérifié. `owner` dit qui doit
+    le faire : `claude`, ou `user` quand il faut un humain (écran réel,
+    téléphone, données de prod). `evidence` : ce qui a été réellement constaté
+    — la commande et sa sortie, le test automatique, le comportement observé.
+    Un test fait (ok, ko, partial) est noté au journal ; un point du plan non.
+    """
     tache = conn.execute("SELECT id, project_id, title FROM tasks WHERE id = ?", (task_id,)).fetchone()
     if tache is None:
         raise NotFound(f"tâche introuvable : {task_id}")
@@ -1263,16 +1271,58 @@ def add_test(conn, task_id: int, what: str, result: str, environment: str | None
     if not what:
         raise ValueError("dire ce qui a été testé (`what`)")
     result = _result_in(result)
+    _exige_preuve(result, evidence, actor)
+    owner = owner if owner in ("claude", "user") else actor if actor in ("claude", "user") else "claude"
     cur = conn.execute(
         "INSERT INTO task_tests (project_id, task_id, what, result, environment, detail, actor,"
-        " created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        " evidence, owner, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (tache["project_id"], task_id, what, result, (environment or "").strip() or None,
-         (detail or "").strip() or None, actor, now()))
-    ou = f" ({environment.strip()})" if (environment or "").strip() else ""
-    log_work(tache["project_id"], task_id=task_id, kind="work", actor=actor,
-             summary=f"Test {config.TEST_RESULTS[result]} #{task_id} {what}{ou}",
-             detail=(detail or "").strip() or None, conn=conn)
+         (detail or "").strip() or None, actor, (evidence or "").strip() or None, owner, now()))
+    if result != "todo":
+        _journal_test(conn, tache["project_id"], task_id, what, result, environment,
+                      detail, evidence, actor)
     return dict(conn.execute("SELECT * FROM task_tests WHERE id = ?", (cur.lastrowid,)).fetchone())
+
+
+def _exige_preuve(result: str, evidence: str | None, actor: str) -> None:
+    """Un « ok » de Claude sans preuve est refusé : c'est tout l'intérêt du
+    registre. Kevin, lui, peut cocher d'un clic ce qu'il a vu de ses yeux."""
+    if result == "ok" and actor != "user" and not (evidence or "").strip():
+        raise ValueError("un test « ok » exige `evidence` : ce que tu as réellement constaté "
+                         "(commande et sortie, test automatique, comportement observé)")
+
+
+def _journal_test(conn, project_id, task_id, what, result, environment, detail, evidence, actor):
+    ou = f" ({environment.strip()})" if (environment or "").strip() else ""
+    corps = "\n\n".join(x for x in ((detail or "").strip(),
+                                    f"Preuve : {evidence.strip()}" if (evidence or "").strip() else "") if x)
+    log_work(project_id, task_id=task_id, kind="work", actor=actor,
+             summary=f"Test {config.TEST_RESULTS[result]} #{task_id} {what}{ou}",
+             detail=corps or None, conn=conn)
+
+
+@_with_conn
+def update_test(conn, test_id: int, result: str, evidence: str | None = None,
+                detail: str | None = None, environment: str | None = None,
+                actor: str = "claude") -> dict:
+    """Passe un point du plan (todo) à fait, ou corrige un test. Garde la même
+    ligne : le plan reste lisible, chaque point avec son verdict et sa preuve."""
+    row = conn.execute("SELECT * FROM task_tests WHERE id = ?", (test_id,)).fetchone()
+    if row is None:
+        raise NotFound(f"test introuvable : {test_id}")
+    result = _result_in(result)
+    _exige_preuve(result, evidence or row["evidence"], actor)
+    conn.execute(
+        "UPDATE task_tests SET result = ?, evidence = COALESCE(?, evidence),"
+        " detail = COALESCE(?, detail), environment = COALESCE(?, environment), actor = ?,"
+        " created_at = ? WHERE id = ?",
+        (result, (evidence or "").strip() or None, (detail or "").strip() or None,
+         (environment or "").strip() or None, actor, now(), test_id))
+    if result != "todo":
+        _journal_test(conn, row["project_id"], row["task_id"], row["what"], result,
+                      environment or row["environment"], detail or row["detail"],
+                      evidence or row["evidence"], actor)
+    return dict(conn.execute("SELECT * FROM task_tests WHERE id = ?", (test_id,)).fetchone())
 
 
 @_with_conn
@@ -1301,9 +1351,13 @@ def summarise_tests(tests: list[dict]) -> dict | None:
     """Compte par résultat ; `last` est le plus récent (listes triées récent d'abord)."""
     if not tests:
         return None
-    s = {"ok": 0, "ko": 0, "partial": 0, "total": len(tests), "last": tests[0]["result"]}
+    s = {"ok": 0, "ko": 0, "partial": 0, "todo": 0, "user_todo": 0, "total": len(tests)}
     for t in tests:
-        s[t["result"]] += 1
+        s[t["result"]] = s.get(t["result"], 0) + 1
+        if t["result"] == "todo" and (t.get("owner") or t.get("actor")) == "user":
+            s["user_todo"] += 1
+    faits = [t for t in tests if t["result"] != "todo"]
+    s["last"] = faits[0]["result"] if faits else "todo"
     return s
 
 
@@ -1311,12 +1365,17 @@ def summarise_tests(tests: list[dict]) -> dict | None:
 def tests_by_task(conn, project_id: int) -> dict[int, dict]:
     """Résumé par tâche : nombre de tests par résultat et dernier résultat."""
     out: dict[int, dict] = {}
-    for r in conn.execute("SELECT task_id, result FROM task_tests WHERE project_id = ?"
+    for r in conn.execute("SELECT task_id, result, owner, actor FROM task_tests WHERE project_id = ?"
                           " ORDER BY created_at, id", (project_id,)):
-        s = out.setdefault(r["task_id"], {"ok": 0, "ko": 0, "partial": 0, "total": 0, "last": None})
-        s[r["result"]] += 1
+        s = out.setdefault(r["task_id"], {"ok": 0, "ko": 0, "partial": 0, "todo": 0,
+                                          "user_todo": 0, "total": 0, "last": None})
+        s[r["result"]] = s.get(r["result"], 0) + 1
         s["total"] += 1
-        s["last"] = r["result"]
+        if r["result"] == "todo":
+            if (r["owner"] or r["actor"]) == "user":
+                s["user_todo"] += 1
+        else:
+            s["last"] = r["result"]
     return out
 
 
@@ -2264,6 +2323,9 @@ def save_ai_reply(conn, ticket_id: int, content: str | None, draft: dict | None 
         if draft and draft.get(key):
             sets.append(f"{key} = ?")
             params.append(str(draft[key])[:4000])
+    if draft and isinstance(draft.get("checks"), list):
+        sets.append("checks = ?")
+        params.append(json.dumps([str(c)[:300] for c in draft["checks"]][:6], ensure_ascii=False))
     # Doublon : on ne retient qu'un signalement réel du MÊME projet — le numéro
     # vient d'une IA, il se vérifie.
     if draft and "duplicate_of" in draft:
@@ -2322,6 +2384,15 @@ def accept_ticket(conn, ticket_id: int, queue: bool = False, priority: int = 2,
                        status="queued" if queue else "todo", tags=["support"], conn=conn)
     conn.execute("UPDATE support_tickets SET status = 'accepted', task_id = ?, updated_at = ?"
                  " WHERE id = ?", (task["id"], now(), ticket_id))
+    # Le plan de test naît avec la tâche : reproduire d'abord (l'agent), puis
+    # les vérifications de l'utilisateur, à faire par un humain.
+    add_test(task["id"], f"Reproduire le problème du signalement #{ticket_id} avant de corriger",
+             "todo", detail=t["summary"][:500] if t["summary"] else None, owner="claude",
+             conn=conn)
+    for verif in ticket_checks(t):
+        add_test(task["id"], verif, "todo", owner="user", actor="user",
+                 detail=f"Vérification proposée avec le signaleur (signalement #{ticket_id}).",
+                 conn=conn)
     # Les pièces du signaleur passent à la tâche : l'agent les trouvera là.
     for f in conn.execute("SELECT * FROM support_files WHERE ticket_id = ? AND source = 'user'"
                           " ORDER BY id", (ticket_id,)).fetchall():
@@ -2331,6 +2402,13 @@ def accept_ticket(conn, ticket_id: int, queue: bool = False, priority: int = 2,
              summary=f"Signalement #{t['id']} de {t['reporter_name']} validé → tâche #{task['id']}"
                      + (" (mise en file)" if queue else ""), conn=conn)
     return task
+
+
+def ticket_checks(t: dict) -> list[str]:
+    try:
+        return [c for c in json.loads(t.get("checks") or "[]") if isinstance(c, str)]
+    except (json.JSONDecodeError, TypeError):
+        return []
 
 
 def _mention_captures(conn, ticket_id: int) -> str:

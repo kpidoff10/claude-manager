@@ -113,6 +113,19 @@ sans le contexte de la conversation ?*
 - ✅ « Corrigé le débordement des tableaux sur mobile en passant stack et fiche projet en listes de cartes »
 - ❌ « Corrigé le bug » · « Mis à jour les fichiers » · « Terminé la tâche 4 »
 
+**Les tests d'une tâche** — le registre que Kevin lit pour savoir si c'est fait :
+
+- `plan_tests` **avant** de coder : tout ce qu'il faudra vérifier. Ce qu'un
+  humain doit voir lui-même (écran réel, téléphone, données de prod, e-mail
+  reçu) prend `for_user: true`, avec dans `how` les étapes et le résultat
+  attendu : Kevin le verra « à tester par toi ».
+- `update_test(test_id, result, evidence=…)` à chaque vérification. `evidence`
+  = ce qui a été **réellement constaté** : la commande et sa sortie, le test
+  automatique qui couvre le cas, le comportement observé. Un `ok` sans preuve
+  est refusé par le serveur.
+- Quand Kevin rapporte un test (« testé sur le téléphone, ça marche »),
+  `record_test` avec ce qu'il a dit comme preuve.
+
 **`update_task` / `create_task`** — l'état du travail.
 `in_progress` **au moment où on attaque**, pas après coup ; `blocked` avec
 `blocked_reason` dès qu'on ne peut plus avancer ; `done` à la fin. Créer une

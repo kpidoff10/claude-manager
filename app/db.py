@@ -62,6 +62,13 @@ MIGRATIONS = [
     ("support_tickets", "warm_state", "TEXT"),
     # Ce que fait l'IA pendant que le signaleur attend (« consulte le code… »).
     ("support_tickets", "ai_progress", "TEXT"),
+    # Tests : la preuve de ce qui a été vérifié, et QUI doit tester (claude ou
+    # user). Avec le résultat `todo`, un test devient un point du plan.
+    ("task_tests", "evidence", "TEXT"),
+    ("task_tests", "owner", "TEXT"),
+    # Vérifications proposées par l'IA des signalements, du point de vue de
+    # l'utilisateur (JSON) : elles deviennent des tests « à faire par toi ».
+    ("support_tickets", "checks", "TEXT"),
 ]
 
 

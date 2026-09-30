@@ -525,9 +525,21 @@ async def add_task_test(request: Request, slug: str, task_id: int):
         try:
             repo.add_test(task_id, what, _clean(form.get("result")),
                           environment=_clean(form.get("environment")),
-                          detail=_clean(form.get("detail")), actor="user")
+                          detail=_clean(form.get("detail")), actor="user", owner="user")
         except ValueError:
             pass
+    return _after_test(request, slug, form, task_id)
+
+
+@router.post("/p/{slug}/tasks/{task_id}/tests/{test_id}/update")
+async def update_task_test(request: Request, slug: str, task_id: int, test_id: int):
+    """Verdict d'un clic sur un point du plan — typiquement « à tester par toi »."""
+    form = await request.form()
+    try:
+        repo.update_test(test_id, _clean(form.get("result")) or "",
+                         detail=_clean(form.get("detail")), actor="user")
+    except (ValueError, repo.NotFound):
+        pass
     return _after_test(request, slug, form, task_id)
 
 
@@ -821,6 +833,16 @@ def lire_doc(request: Request, slug: str, chemin: str, ref: str = ""):
     ça, `../../.env` serait lisible par quiconque a le mot de passe.
     """
     projet = repo.require_project(slug)
+    # Le dossier du projet n'est pas visible d'ici : autre compte Linux (ses
+    # droits le ferment), chemin Windows, ou hors du dossier monté. Le dire tel
+    # quel — « n'existe pas » laissait croire que le document avait disparu.
+    if not projet.get("path") or not Path(projet["path"]).is_dir():
+        raise HTTPException(
+            status_code=404,
+            detail=(f"Le dossier du projet « {projet.get('path') or '(aucun chemin)'} » n'est pas "
+                    f"accessible depuis le manager : seuls les projets sous "
+                    f"{config.PROJECTS_ROOT} sont lisibles. Le document existe peut-être bien, "
+                    f"mais il ne peut pas être affiché ici."))
     racine = Path(projet.get("path") or "").resolve()
     try:
         cible = (racine / chemin).resolve()

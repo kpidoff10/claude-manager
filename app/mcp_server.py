@@ -102,17 +102,50 @@ def _rappel_out(r: dict) -> dict:
 
 @mcp.tool()
 def record_test(task_id: int, what: str, result: str, environment: str | None = None,
-                detail: str | None = None) -> dict:
-    """Consigne un test fait sur une tâche ou une sous-tâche : ce qui a été
-    testé, le résultat (`ok`, `ko` ou `partial`), où (`environment` : dev, prod,
-    téléphone, navigateur…) et le constat (`detail` : erreur vue, ce qui reste).
+                detail: str | None = None, evidence: str | None = None,
+                for_user: bool = False) -> dict:
+    """Consigne un test sur une tâche ou une sous-tâche : ce qui a été testé,
+    le résultat (`ok`, `ko`, `partial`, ou `todo` pour un test prévu), où
+    (`environment` : dev, prod, téléphone, navigateur…), le constat (`detail`).
 
-    À appeler après chaque vérification réelle — tsc/lint/tests automatiques,
-    parcours dans le navigateur, essai sur téléphone — et quand Kevin rapporte
-    un test manuel (« testé sur le téléphone, ça marche », « le tri est encore
-    faux »). Un test raté puis refait réussi = deux appels : l'historique garde
-    les deux. Chaque test est aussi noté au journal du projet."""
-    return repo.add_test(task_id, what, result, environment=environment, detail=detail)
+    `evidence` — OBLIGATOIRE pour un `ok` : ce que tu as réellement constaté.
+    La commande lancée et ce qu'elle a renvoyé (« npm test : 42 passés »), le
+    test automatique qui couvre le cas (son nom), le comportement observé dans
+    le navigateur. Pas de preuve, pas de `ok`.
+
+    `for_user=True` : ce test demande un humain (écran réel, téléphone, données
+    de prod, e-mail reçu…). Avec `result='todo'`, il apparaît à Kevin comme
+    « à tester par toi » ; mets dans `detail` les étapes précises et le résultat
+    attendu.
+
+    À appeler après chaque vérification réelle, et quand Kevin rapporte un test
+    manuel. Un test raté puis refait réussi = deux appels, ou update_test."""
+    return repo.add_test(task_id, what, result, environment=environment, detail=detail,
+                         evidence=evidence, owner="user" if for_user else "claude")
+
+
+@mcp.tool()
+def plan_tests(task_id: int, tests: list[dict]) -> list:
+    """Pose le PLAN DE TEST d'une tâche, avant de la faire : tout ce qu'il
+    faudra vérifier pour pouvoir dire qu'elle est terminée.
+
+    `tests` : [{"what": "…", "for_user": false, "how": "étapes et résultat
+    attendu"}]. `for_user=true` pour ce qu'un humain doit vérifier lui-même.
+    Chaque point naît en `todo` ; passe-le ensuite à ok/ko/partial avec
+    update_test(test_id, result, evidence=…)."""
+    return [repo.add_test(task_id, t.get("what", ""), "todo", detail=t.get("how"),
+                          owner="user" if t.get("for_user") else "claude")
+            for t in tests if (t.get("what") or "").strip()]
+
+
+@mcp.tool()
+def update_test(test_id: int, result: str, evidence: str | None = None,
+                detail: str | None = None, environment: str | None = None) -> dict:
+    """Donne son verdict à un point du plan (ou corrige un test) : `result`
+    ok, ko ou partial, et `evidence` = ce qui a été réellement constaté
+    (obligatoire pour un ok). Le point garde sa place dans le plan."""
+    return repo.update_test(test_id, result, evidence=evidence, detail=detail,
+                            environment=environment)
 
 
 @mcp.tool()

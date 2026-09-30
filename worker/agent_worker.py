@@ -270,7 +270,18 @@ Règles de cette exécution :
 - Reste strictement dans le périmètre de cette tâche. Ne corrige rien d'autre au passage.
 - Le briefing du projet t'a été injecté au démarrage : respecte ses conventions, ses \
 décisions et sa mémoire écrite.
-- Lance les tests du projet avant de conclure.
+- TESTS — le registre de la tâche est ce que Kevin lira pour savoir si c'est fait :
+  1. Avant de coder : plan_tests(task_id={task['id']}, tests=[...]) — tout ce qu'il \
+faudra vérifier pour dire que la tâche est faite (pour un signalement : d'abord \
+reproduire le problème décrit). Des points déjà prévus existent peut-être : list_tests.
+  2. Pour chaque point que tu vérifies : update_test(test_id, result, evidence=...). \
+`evidence` = ce que tu as RÉELLEMENT constaté : la commande et sa sortie, le test \
+automatique qui couvre le cas (son nom), le comportement observé. Pas de preuve, pas de \
+« ok » — le serveur le refuse. Un échec se consigne aussi (ko), avec ce que tu as vu.
+  3. Ce que tu ne peux pas vérifier toi-même (écran réel, téléphone, données de prod, \
+e-mail reçu, rendu visuel…) : plan_tests avec for_user=true et, dans `how`, les étapes \
+précises et le résultat attendu. Kevin le verra « à tester par toi ».
+  4. Lance les tests automatiques du projet avant de conclure.
 - Si quoi que ce soit relève d'une décision de Kevin — arbitrage produit, ambiguïté de \
 l'énoncé, choix qui engage la suite — n'invente pas : appelle \
 ask_user(task_id={task['id']}, question="<ta question>", options=["Choix A — sa \
@@ -1118,7 +1129,11 @@ avec contournement), dis-le simplement ; propose quand même un ticket si la per
 souhaite.
 - Dès que tu en sais assez (en général 2 à 5 échanges), propose le ticket : termine ta \
 réponse par un bloc, et un seul, exactement de cette forme :
-<ticket>{{"title": "…", "page": "…", "severity": "bloquant|gênant|mineur", "summary": "Contexte : …\nÉtapes : …\nConstaté : …\nAttendu : …\nFréquence : …"}}</ticket>
+<ticket>{{"title": "…", "page": "…", "severity": "bloquant|gênant|mineur", "summary": "Contexte : …\nÉtapes : …\nConstaté : …\nAttendu : …\nFréquence : …", "checks": ["…", "…"]}}</ticket>
+  `checks` : deux à quatre vérifications concrètes, du point de vue de l'utilisateur, \
+qui prouveront que c'est corrigé (« Sur la fiche projet, onglet Suivi, saisir une date \
+réalisée puis Enregistrer : la date reste affichée après rechargement »). Elles \
+serviront de tests à l'équipe.
   Le titre décrit le problème en moins de 90 caractères, sans nom de personne ni \
 référence de client. Si la personne corrige ensuite quelque chose, repropose un bloc \
 complet mis à jour.
@@ -1511,6 +1526,9 @@ def _ia_support(ticket: dict, ouverture: bool = False) -> tuple[str, dict | None
                 # Toujours transmis, même vide : un doublon écarté en cours de
                 # discussion doit disparaître du ticket.
                 propose["duplicate_of"] = brut.get("duplicate_of")
+                verifs = brut.get("checks")
+                if isinstance(verifs, list):
+                    propose["checks"] = [str(v)[:300] for v in verifs if str(v).strip()][:6]
         except json.JSONDecodeError as erreur:
             log(f"signalement #{ticket['id']} : bloc <ticket> illisible ({erreur})")
         texte = TICKET_BLOC.sub("", texte).strip()
@@ -1534,8 +1552,10 @@ def _ia_support(ticket: dict, ouverture: bool = False) -> tuple[str, dict | None
     if propose:
         # Le résumé va à Kevin, qui lit du technique : on n'y retire que les
         # blocs de code et les secrets, la « piste technique » reste.
-        propose = {k: SECRET.sub("[masqué]", BLOC_CODE.sub("[extrait retiré]", v))
-                   if isinstance(v, str) else v for k, v in propose.items()}
+        nettoie = lambda v: SECRET.sub("[masqué]", BLOC_CODE.sub("[extrait retiré]", v))
+        propose = {k: nettoie(v) if isinstance(v, str)
+                   else [nettoie(x) for x in v] if isinstance(v, list) else v
+                   for k, v in propose.items()}
     return texte, propose, session
 
 

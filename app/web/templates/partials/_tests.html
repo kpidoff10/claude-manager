@@ -3,7 +3,8 @@
 {% macro badge(s) %}
 {% if s %}
 <span class="tag tests-badge last-{{ s.last }}"
-      title="{{ s.total }} test(s) : {{ s.ok }} ok, {{ s.ko }} ko, {{ s.partial }} partiel(s) — dernier : {{ s.last }}">🧪 {{ test_results[s.last] }}{% if s.total > 1 %} {{ s.total }}{% endif %}</span>
+      title="{{ s.total }} test(s) : {{ s.ok }} ok, {{ s.ko }} ko, {{ s.partial }} partiel(s), {{ s.todo }} à faire — dernier : {{ s.last }}">🧪 {{ test_results[s.last] }}{% if s.total > 1 %} {{ s.total }}{% endif %}</span>
+{% if s.user_todo %}<span class="tag tests-user" title="Tests qu'il te reste à faire toi-même">🧑 {{ s.user_todo }} à tester</span>{% endif %}
 {% endif %}
 {% endmacro %}
 
@@ -14,13 +15,28 @@
   {% if tests %}
   <ul class="tests-list">
     {% for x in tests %}
-    <li class="test-item result-{{ x.result }}">
+    {% set pour_moi = x.result == 'todo' and (x.owner or x.actor) == 'user' %}
+    <li class="test-item result-{{ x.result }} {{ 'pour-moi' if pour_moi }}">
       <span class="test-icon" title="{{ x.result }}">{{ test_results[x.result] }}</span>
       <span class="test-body">
         <span class="test-what">{{ x.what }}</span>
+        {% if pour_moi %}<span class="tag tests-user">à tester par toi</span>
+        {% elif x.result == 'todo' %}<span class="tag">prévu · Claude</span>{% endif %}
         {% if x.environment %}<span class="tag">{{ x.environment }}</span>{% endif %}
         <span class="muted small">{{ 'moi' if x.actor == 'user' else x.actor }} · {{ x.created_at[:16]|replace('T', ' ') }} UTC</span>
         {% if x.detail %}<span class="test-detail">{{ x.detail }}</span>{% endif %}
+        {% if x.evidence %}<span class="test-detail test-evidence"><strong>Preuve :</strong> {{ x.evidence }}</span>{% endif %}
+        {% if x.result == 'todo' %}
+        <form class="panel-form test-verdict" method="post" {{ cible }}
+              action="/p/{{ project.slug }}/tasks/{{ t.id }}/tests/{{ x.id }}/update">
+          <input type="hidden" name="tab" value="tasks"><input type="hidden" name="view" value="{{ view }}">
+          {% if fiche %}<input type="hidden" name="retour" value="fiche">{% endif %}
+          <input name="detail" placeholder="Constat (facultatif)" aria-label="Constat">
+          <button type="submit" name="result" value="ok" class="small">✅</button>
+          <button type="submit" name="result" value="partial" class="ghost small">◐</button>
+          <button type="submit" name="result" value="ko" class="ghost small danger">❌</button>
+        </form>
+        {% endif %}
       </span>
       <form class="panel-form inline" method="post" {{ cible }}
             action="/p/{{ project.slug }}/tasks/{{ t.id }}/tests/{{ x.id }}/delete"
@@ -46,6 +62,7 @@
       <button type="submit" name="result" value="ok" class="small">✅ OK</button>
       <button type="submit" name="result" value="partial" class="ghost small">◐ Partiel</button>
       <button type="submit" name="result" value="ko" class="ghost small danger">❌ KO</button>
+      <button type="submit" name="result" value="todo" class="ghost small" title="À tester plus tard, par toi">⏳ À tester</button>
     </div>
   </form>
 </details>

@@ -66,8 +66,14 @@ def _task_line(task: dict) -> str:
         extras.append(f"sous-tâche de #{task['parent_id']}")
     s = task.get("tests_summary")
     if s:
-        extras.append(f"tests {s['ok']}✅ {s['ko']}❌ {s['partial']}◐, dernier "
-                      f"{config.TEST_RESULTS[s['last']]}")
+        texte = f"tests {s['ok']}✅ {s['ko']}❌ {s['partial']}◐"
+        if s.get("last") in config.TEST_RESULTS and s["last"] != "todo":
+            texte += f", dernier {config.TEST_RESULTS[s['last']]}"
+        if s.get("todo"):
+            texte += f", {s['todo']}⏳ à faire"
+            if s.get("user_todo"):
+                texte += f" dont {s['user_todo']} par Kevin"
+        extras.append(texte)
     if task["owner"] != "claude":
         extras.append(f"pour {task['owner']}")
     if task["tags"]:

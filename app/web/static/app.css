@@ -1113,3 +1113,9 @@ code.secret-once { font-size: 15px; padding: 2px 8px; user-select: all; }
 .task-file-thumb img { height: 64px; max-width: 160px; object-fit: cover; object-position: top; border-radius: 6px; border: 1px solid var(--border); display: block; }
 .task-file-form { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .task-file-form input[type=file] { max-width: 100%; }
+.tag.tests-user { background: rgba(224, 175, 104, .15); color: var(--warn); }
+.test-item.pour-moi { border-left: 3px solid var(--warn); padding-left: 6px; }
+.test-evidence { color: var(--muted); }
+.test-verdict { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-top: 4px; }
+.test-verdict input { flex: 1 1 10em; min-height: 30px; font-size: 12.5px; }
+.ticket-checks { margin: 0 0 6px; padding-left: 20px; font-size: 13.5px; }

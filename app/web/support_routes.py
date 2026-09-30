@@ -49,6 +49,7 @@ templates.env.globals["statut_signaleur"] = statut_signaleur
 templates.env.globals["signalements_en_attente"] = lambda: repo.count_submitted_tickets()
 templates.env.globals["public_url"] = config.PUBLIC_URL.rstrip("/")
 templates.env.globals["est_image"] = captures.est_image
+templates.env.globals["ticket_checks"] = repo.ticket_checks
 templates.env.globals["taille_lisible"] = captures.taille_lisible
 templates.env.globals["pieces_acceptees"] = captures.ACCEPTE
 

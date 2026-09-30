@@ -36,6 +36,9 @@
   {% if t.page %}<p class="muted small">Écran : {{ t.page }}</p>{% endif %}
   {% if t.duplicate_of %}<p class="muted small">Problème déjà signalé (n° {{ t.duplicate_of }}) : votre ticket le confirme et le complète.</p>{% endif %}
   <div class="ticket-summary">{{ t.summary }}</div>
+  {% set verifs = ticket_checks(t) %}
+  {% if verifs %}<p class="muted small"><strong>Ce qui sera vérifié :</strong></p>
+  <ul class="ticket-checks">{% for v in verifs %}<li>{{ v }}</li>{% endfor %}</ul>{% endif %}
   <form method="post" action="/support/t/{{ t.id }}/submit">
     <button type="submit" class="primary">Envoyer ce ticket à l'équipe</button>
   </form>
